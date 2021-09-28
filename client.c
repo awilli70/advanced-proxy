@@ -21,9 +21,10 @@ void error(char *msg) {
     exit(0);
 }
 
-char* get_buf(char *req) {
+char* get_server_response(char *req) {
     int sockfd, n;
     int *portno;
+    u_int32_t res_sz = 0;
     struct sockaddr_in serveraddr;
     struct hostent *server;
     char *hostname;
