@@ -6,6 +6,6 @@
 #define PARSER_INCLUDED
 
 /* returns arr with [path, host, port (if exists)] */
-extern char **split_request(char *);
+extern void **split_request(char *);
 
 #endif

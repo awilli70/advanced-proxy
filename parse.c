@@ -8,7 +8,6 @@
 #include <assert.h>
 
 #define GETREQ_SIZE 4096
-char *getreq = "GET http://www.cs.cmu.edu/~prs/bio.html HTTP/1.1\r\n Host: www.cs.cmu.edu\r\n\r\n";
 
 /* returns arr with [path, host, port (if exists)] */
 void **split_request(char *req) {
@@ -18,7 +17,7 @@ void **split_request(char *req) {
     assert(path != NULL);
     char *host = malloc(101 * sizeof(char));
     assert(host != NULL);
-    u_int32_t *port = malloc(sizeof(u_int32_t));
+    int *port = malloc(sizeof(int));
     assert(port != NULL);
     *port = 0;
     u_int32_t i = 0;
@@ -33,13 +32,14 @@ void **split_request(char *req) {
     }
     path[i] = '\0';
     i = 0;
-    while (*host_loc != ' ' && *host_loc != ':') {
+    while ((*host_loc != ' ' && *host_loc != ':') && 
+                (*host_loc != '\r' && *host_loc != '\n')) {
         host[i] = *host_loc;
         i++;
         host_loc = host_loc + 1;
     }
     host[i] = '\0';
-    if (*host_loc == ' ') {
+    if (*host_loc == ' ' || *host_loc == '\r') {
         *port = 80;
         arr[0] = path;
         arr[1] = host; 
@@ -59,11 +59,4 @@ void **split_request(char *req) {
         arr[2] = port;
         return arr;
     }
-}
-
-int main() {
-    void **arr = split_request(getreq);
-    u_int32_t *success = arr[2];
-    printf("%d\n", *success);
-    exit(EXIT_SUCCESS);
 }
