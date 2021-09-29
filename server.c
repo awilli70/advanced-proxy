@@ -96,12 +96,17 @@ char *read_client_req(int connfd) {
 void write_client_response(int connfd, char* buf) {
     u_int32_t i = 0;
     int n = 0;
-    n = write(connfd, buf, 10*REQBUFSIZE);
-    i += n;
-    while (n > 0) {
-      n = write(connfd, buf + i, 10*REQBUFSIZE - i);
-      i += n;
+    u_int32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
+    char *content_sz = strstr(buf, "Content-Length: ") + 16;
+    while (*content_sz != ' ' && *content_sz != '\r') {
+        if (i > 0) {
+            i = i * 10;    
+        }
+        i = i + (*content_sz - '0');
+        content_sz = content_sz + 1;
     }
+    n = write(connfd, buf, sizeof(char) * (i + header_length));
+    assert(n == sizeof(char) * (i + header_length));
     if (n < 0) 
       error("ERROR writing to socket");
     return;
