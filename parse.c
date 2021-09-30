@@ -67,9 +67,10 @@ void **split_request(char *req) {
 }
 
 u_int32_t parse_int_from_header(char *buf, char *delim) {
-    char *it;
+    char *it = NULL;  
     u_int32_t accum = 0;
     it = strstr(buf, delim) + strlen(delim);
+    assert((it - strlen(delim)) != NULL);
     while (*it != ' ' && *it != '\r') {
         if (accum > 0) {
             accum *= 10;

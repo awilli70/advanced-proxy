@@ -64,7 +64,11 @@ int main(int argc, char **argv)
         res = cache_get(c, uri);
         if (res == NULL) {
             res = get_server_response(req);
-            cache_put(c, uri, res, 10);
+            if (strstr(res, "max-age=") != NULL) {
+                cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
+            } else {
+                cache_put(c, uri, res, 3600);
+            }
             printf("Fetched %s from server\n", uri);
             write_client_response(connfd, res);
         } else {
