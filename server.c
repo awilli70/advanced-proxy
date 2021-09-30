@@ -14,6 +14,7 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include "client.h"
+#include "parse.h"
 
 #define REQBUFSIZE (1024 * 1024)
 
@@ -68,8 +69,6 @@ int get_client_connfd(int listenfd) {
     hostaddrp = inet_ntoa(clientaddr.sin_addr);
     if (hostaddrp == NULL)
     error("ERROR on inet_ntoa\n");
-    printf("server established connection with %s (%s)\n", 
-    hostp->h_name, hostaddrp);
     return connfd;
 }
     
@@ -82,12 +81,12 @@ char *read_client_req(int connfd) {
     assert(buf != NULL);
     bzero(buf, REQBUFSIZE);
     u_int32_t i = 0;
-    n = read(connfd, buf, REQBUFSIZE);
+    n = read(connfd, buf, 1024);
     if (n < 0) 
         error("ERROR reading from socket");
     i += n;
     while (strstr(buf, "\r\n\r\n") == NULL) {
-      n = read(connfd, buf + i, REQBUFSIZE);
+      n = read(connfd, buf + i, 1024);
       i += n;
     }
     return buf;
@@ -97,14 +96,7 @@ void write_client_response(int connfd, char* buf) {
     u_int32_t i = 0;
     int n = 0;
     u_int32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
-    char *content_sz = strstr(buf, "Content-Length: ") + 16;
-    while (*content_sz != ' ' && *content_sz != '\r') {
-        if (i > 0) {
-            i = i * 10;    
-        }
-        i = i + (*content_sz - '0');
-        content_sz = content_sz + 1;
-    }
+    i = parse_int_from_header(buf, "Content-Length: ");
     n = write(connfd, buf, sizeof(char) * (i + header_length));
     assert(n == sizeof(char) * (i + header_length));
     if (n < 0) 

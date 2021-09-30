@@ -17,5 +17,6 @@ extern void free_cache(C);
 
 extern C cache_put(C, char *, char *, u_int32_t);
 extern char *cache_get(C, char *);
+extern u_int32_t cache_ttl(C, char *);
 
 #endif

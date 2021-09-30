@@ -143,3 +143,16 @@ char *cache_get(C c, char *key) {
         return NULL;
     }
 }
+
+u_int32_t cache_ttl(C c, char *key) {
+    N ref = hash_search(c->refs, key);
+    assert(ref != NULL);
+    time_t access;
+    time(&access);
+    if (ref != NULL) {
+        N obj = list_ptr(ref);
+        u_int32_t elapsed = 
+            (u_int32_t) difftime(access, obj->created);
+        return elapsed;
+    }
+}

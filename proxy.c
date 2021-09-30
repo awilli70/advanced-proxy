@@ -13,6 +13,7 @@
 #include "parse.h"
 #include "client.h"
 #include "server.h"
+#include "cache.h"
 
 int main(int argc, char **argv)
 {
@@ -26,7 +27,8 @@ int main(int argc, char **argv)
     int portno = atoi(argv[1]);
     int connfd;
     int optval;
-    char *req, *res;
+    char *req, *res, *uri;
+    Cache_T c;
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
     if (listenfd < 0) 
@@ -54,12 +56,25 @@ int main(int argc, char **argv)
     /* listen: make it a listening socket ready to accept connection requests */
     if (listen(listenfd, 5) < 0) /* allow 5 requests to queue up */ 
         error("ERROR on listen");
+    c = initialize_cache(10);
     while(1) {
         connfd = get_client_connfd(listenfd);
         req = read_client_req(connfd);
-        res = get_server_response(req);
-        write_client_response(connfd, res);
+        uri = make_uri(split_request(req));
+        res = cache_get(c, uri);
+        if (res == NULL) {
+            res = get_server_response(req);
+            cache_put(c, uri, res, 10);
+            printf("Fetched %s from server\n", uri);
+            write_client_response(connfd, res);
+        } else {
+            printf("Fetched %s from cache\n", uri);
+            res = add_header(res, cache_ttl(c, uri));
+            write_client_response(connfd, res);
+            free(res);
+        }
         printf("Response Sent\n");
+        free(req);
         close(connfd);
     }
 }

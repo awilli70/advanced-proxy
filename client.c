@@ -68,24 +68,16 @@ char* get_server_response(char *req) {
     /* print the server's reply */
     bzero(buf, BUFSIZE);
     i = 0;
-    n = read(sockfd, buf, BUFSIZE);
+    n = read(sockfd, buf, 1024);
     if (n < 0) 
         error("ERROR reading from socket");
     i += n;
     while (n > 0 && i < content_length) {
       if (content_length > BUFSIZE && strstr(buf, "Content-Length: ") != NULL) {
-        content_length = 0;
-        char *cont_idx = strstr(buf, "Content-Length: ") + 16;
-        while (*cont_idx != ' ' && *cont_idx != '\r') {
-            if (content_length > 0) {
-                content_length = content_length * 10;    
-            }
-            content_length = content_length + (*cont_idx - '0');
-            cont_idx = cont_idx + 1;
-        }
+        content_length = parse_int_from_header(buf, "Content-Length: ");
         content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
       }
-      n = read(sockfd, buf + i, BUFSIZE);
+      n = read(sockfd, buf + i, 1024);
       i += n;
     }
     close(sockfd);
