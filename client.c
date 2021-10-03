@@ -73,7 +73,7 @@ char* get_server_response(char *req) {
         error("ERROR reading from socket");
     i += n;
     while (n > 0 && i < content_length) {
-      if (content_length > BUFSIZE && strstr(buf, "Content-Length: ") != NULL) {
+      if (content_length > BUFSIZE && check_header(buf, "Content-Length: ") != NULL) {
         content_length = parse_int_from_header(buf, "Content-Length: ");
         content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
       }

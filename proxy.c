@@ -64,7 +64,7 @@ int main(int argc, char **argv)
         res = cache_get(c, uri);
         if (res == NULL) {
             res = get_server_response(req);
-            if (strstr(res, "max-age=") != NULL) {
+            if (check_header(res, "max-age=") != NULL) {
                 cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
             } else {
                 cache_put(c, uri, res, 3600);

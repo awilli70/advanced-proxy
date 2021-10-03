@@ -97,8 +97,12 @@ void write_client_response(int connfd, char* buf) {
     int n = 0;
     u_int32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
     i = parse_int_from_header(buf, "Content-Length: ");
-    n = write(connfd, buf, sizeof(char) * (i + header_length));
-    assert(n == sizeof(char) * (i + header_length));
+    if (i != (10 * REQBUFSIZE)) {
+      n = write(connfd, buf, sizeof(char) * (i + header_length));
+      assert(n == sizeof(char) * (i + header_length));
+    } else {
+      n = write(connfd, buf, sizeof(char) * i);
+    }
     if (n < 0) 
       error("ERROR writing to socket");
     return;

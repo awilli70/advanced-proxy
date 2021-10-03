@@ -8,7 +8,7 @@
 #include <assert.h>
 
 #define GETREQ_SIZE 4096
-#define GETRES_SIZE (10 * 1024 * 1024 + 248)
+#define GETRES_SIZE (10 * 1024 * 1024)
 
 /* returns arr with [path, host, port (if exists)] */
 void **split_request(char *req) {
@@ -66,10 +66,23 @@ void **split_request(char *req) {
     }
 }
 
+char *check_header(char *buf, char *delim) {
+    char *end = strstr(buf, "\r\n\r\n");
+    char *ret = NULL;
+
+    if (end == NULL) return NULL;
+    *end = '\0';
+    ret = strstr(buf, delim);
+    *end = '\r';
+    return ret;
+}
+
 u_int32_t parse_int_from_header(char *buf, char *delim) {
     char *it = NULL;  
     u_int32_t accum = 0;
-    it = strstr(buf, delim) + strlen(delim);
+
+    it = check_header(buf, delim) + strlen(delim);
+    if ((it - strlen(delim)) == NULL) return GETRES_SIZE;
     assert((it - strlen(delim)) != NULL);
     while (*it != ' ' && *it != '\r') {
         if (accum > 0) {
@@ -83,11 +96,12 @@ u_int32_t parse_int_from_header(char *buf, char *delim) {
 
 char *make_uri(void **req_arr) {
     char *uri = malloc(200);
-    assert(uri != NULL);
     int *port = req_arr[2];
     char *host = req_arr[1];
     char *path = req_arr[0];
     char portstr[10];
+
+    assert(uri != NULL);
     sprintf(portstr, "%d", *port);
     assert(uri != NULL);
     uri = strcpy(uri, host);
@@ -103,17 +117,19 @@ char *make_uri(void **req_arr) {
 
 char *add_header(char *buf, u_int32_t ttl) {
     char *req = malloc((sizeof(char) * GETRES_SIZE));
-    assert(req != NULL);
-    bzero(req, GETRES_SIZE);
     char *header_end = strstr(buf, "\r\n\r\n");
-    strncpy(req, buf, (header_end - buf));
     char *insert = "\r\nAge: ";
     char ttlstring[20];
+    u_int32_t bytes_remaining;
+
+    assert(req != NULL);
+    bzero(req, GETRES_SIZE);
+    strncpy(req, buf, (header_end - buf));
     sprintf(ttlstring, "%d", ttl);
     (void) strncpy(req + strlen(req), insert, strlen(insert));
     (void) strncpy(req + strlen(req), ttlstring, strlen(ttlstring));
     (void) strncpy(req + strlen(req), "\r\n\r\n", strlen("\r\n\r\n"));
-    u_int32_t bytes_remaining = parse_int_from_header(req, "Content-Length: ");
+    bytes_remaining = parse_int_from_header(req, "Content-Length: ");
     memcpy(req + strlen(req), buf + (header_end + 4 - buf), bytes_remaining);
     return req;
 }

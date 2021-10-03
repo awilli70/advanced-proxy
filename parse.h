@@ -12,5 +12,6 @@ extern void **split_request(char *);
 extern u_int32_t parse_int_from_header(char *, char *);
 extern char *make_uri(void **);
 extern char *add_header(char *, u_int32_t);
+extern char *check_header(char *, char *);
 
 #endif
