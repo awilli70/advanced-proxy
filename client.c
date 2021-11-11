@@ -22,7 +22,7 @@ void error(char *msg) {
 }
 
 char* get_server_response(char *req) {
-    int sockfd, n;
+    int sockfd, n, optval;
     int *portno;
     u_int32_t res_sz = 0;
     struct sockaddr_in serveraddr;
@@ -38,6 +38,10 @@ char* get_server_response(char *req) {
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) 
         error("ERROR opening socket");
+
+    optval = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, 
+	            (const void *)&optval , sizeof(int));
 
     /* gethostbyname: get the server's DNS entry */
     hostname = arr[1];
@@ -57,7 +61,7 @@ char* get_server_response(char *req) {
     /* connect: create a connection with the server */
     if (connect(sockfd, &serveraddr, sizeof(serveraddr)) < 0) 
       error("ERROR connecting");
-
+    printf("Connected\n");
     /* send the message line to the server */
     u_int32_t i = (strstr(req, "\r\n\r\n") + 4) - req;
     n = write(sockfd, req, i);

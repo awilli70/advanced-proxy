@@ -8,6 +8,7 @@
 #include <time.h>
 #include <string.h>
 #include "cache.h"
+#include <pthread.h>
 
 #define C Cache_T
 #define H Hash_T
@@ -42,7 +43,12 @@ struct C
 {
     struct Q *objs;
     struct H *refs;
+    pthread_mutex_t lock;
 };
+
+pthread_mutex_t cache_lock(C c) {
+    return c->lock;
+}
 
 void update_node(N n, char *data, u_int32_t ttl) {
     free(n->data);
@@ -55,6 +61,8 @@ C initialize_cache(u_int32_t size) {
     C c = malloc(sizeof(struct Cache_T));
     c->objs = initialize_queue();
     c->refs = initialize_table(size);
+    pthread_mutex_t lock = c->lock;
+    pthread_mutex_init(&lock, NULL);
     return c;
 }
 
@@ -76,7 +84,7 @@ void clear_stales(C c) {
 
     while (n != NULL) {
         elapsed = (u_int32_t) difftime(access, n->created);
-        if (elapsed > n->ttl) {
+        if (elapsed > n->ttl && n->ttl != 0) {
             stale_objs[i] = n->key;
         } else {
             stale_objs[i] = NULL;

@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "hash.h"
 #include "queue.h"
+#include <pthread.h>
 #define C Cache_T
 typedef struct C *C;
 #define Q Queue_T
@@ -18,5 +19,6 @@ extern void free_cache(C);
 extern C cache_put(C, char *, char *, u_int32_t);
 extern char *cache_get(C, char *);
 extern u_int32_t cache_ttl(C, char *);
+extern pthread_mutex_t cache_lock(C);
 
 #endif

@@ -10,10 +10,63 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 #include "parse.h"
 #include "client.h"
 #include "server.h"
 #include "cache.h"
+
+struct proxy_params {
+    int connfd;
+    Cache_T c;
+    pthread_t *t;
+};
+
+struct C
+{
+    struct Q *objs;
+    struct H *refs;
+    pthread_mutex_t lock;
+};
+
+pthread_mutex_t lock;
+
+void *proxy_fun(void *args) {
+    struct proxy_params *ps = args;
+    int connfd = ps->connfd;
+    Cache_T c = ps->c;
+    pthread_t *currthread = ps->t;
+    char *req, *res, *uri;
+    printf("Starting thread for %d\n", connfd);
+
+    req = read_client_req(connfd);
+    uri = make_uri(split_request(req));
+    printf("%s, thread conn %d\n", uri, connfd);
+    pthread_mutex_lock(&lock);
+    res = cache_get(c, uri);
+    
+    if (res == NULL) {
+        res = get_server_response(req);
+        if (check_header(res, "max-age=") != NULL) {
+            cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
+        } else {
+            cache_put(c, uri, res, 3600);
+        }
+        printf("Fetched %s from server\n", uri);
+        write_client_response(connfd, res);
+    } else {
+        printf("Fetched %s from cache\n", uri);
+        res = add_header(res, cache_ttl(c, uri));
+        write_client_response(connfd, res);
+        free(res);
+    }
+    pthread_mutex_unlock(&lock);
+    printf("Response Sent for %d\n", connfd);
+    free(req);
+    free(ps);
+    close(connfd);
+    pthread_exit(NULL);
+}
 
 int main(int argc, char **argv)
 {
@@ -27,8 +80,8 @@ int main(int argc, char **argv)
     int portno = atoi(argv[1]);
     int connfd;
     int optval;
-    char *req, *res, *uri;
     Cache_T c;
+    pthread_t *p;
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
     if (listenfd < 0) 
@@ -56,29 +109,17 @@ int main(int argc, char **argv)
     /* listen: make it a listening socket ready to accept connection requests */
     if (listen(listenfd, 5) < 0) /* allow 5 requests to queue up */ 
         error("ERROR on listen");
-    c = initialize_cache(10);
+    c = initialize_cache(20);
+    pthread_mutex_init(&lock, NULL);
     while(1) {
         connfd = get_client_connfd(listenfd);
-        req = read_client_req(connfd);
-        uri = make_uri(split_request(req));
-        res = cache_get(c, uri);
-        if (res == NULL) {
-            res = get_server_response(req);
-            if (check_header(res, "max-age=") != NULL) {
-                cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
-            } else {
-                cache_put(c, uri, res, 3600);
-            }
-            printf("Fetched %s from server\n", uri);
-            write_client_response(connfd, res);
-        } else {
-            printf("Fetched %s from cache\n", uri);
-            res = add_header(res, cache_ttl(c, uri));
-            write_client_response(connfd, res);
-            free(res);
-        }
-        printf("Response Sent\n");
-        free(req);
-        close(connfd);
+        char *buf = malloc(sizeof(char) * 11);
+        p = malloc(sizeof(pthread_t));
+        struct proxy_params *ps = malloc(sizeof(struct proxy_params));
+        ps->c = c;
+        ps->connfd = connfd;
+        ps->t = p;
+
+        pthread_create(p, NULL, proxy_fun, ps);
     }
 }
