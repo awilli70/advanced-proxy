@@ -10,16 +10,10 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 #include "parse.h"
+#include "error.h"
 
 #define BUFSIZE (10 * 1024 * 1024)
 
-/* 
- * error - wrapper for perror
- */
-void error(char *msg) {
-    perror(msg);
-    exit(0);
-}
 
 char* get_server_response(char *req) {
     int sockfd, n, optval;
@@ -47,8 +41,8 @@ char* get_server_response(char *req) {
     hostname = arr[1];
     server = gethostbyname(hostname);
     if (server == NULL) {
-        fprintf(stderr,"ERROR, no such host as %s.\n", hostname);
-        exit(0);
+        printf("here\n");
+        invalid_hostname(hostname);
     }
     portno = arr[2];
     /* build the server's Internet address */
