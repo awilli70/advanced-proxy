@@ -10,9 +10,32 @@
 #define GETREQ_SIZE 4096
 #define GETRES_SIZE (10 * 1024 * 1024)
 
+/* get_req_type(char *req)
+ *   args: 
+ *     - char *req: HTTP request string as received from client
+ *   return:
+ *     - char *req_type: "GET" if req is a GET request
+ *                       "CONNECT" if req is a CONNECT request
+ *                       Otherwise, error
+ */
+char *get_req_type(char *req)
+{
+    if (strstr(req, "GET ") != NULL) {
+        return "GET";
+    }
+
+    if (strstr(req, "CONNECT ") != NULL) {
+        return "CONNECT";
+    }
+
+    // TODO: handle error
+    return NULL;
+}
+
 /* returns arr with [path, host, port (if exists)] */
 void **split_request(char *req) {
-    char *get_string = "GET ";
+    // char *get_string = "GET ";
+    // ^ commented this out because seems like its never used
     char *host_string = "Host: ";
     char *path = malloc(101 * sizeof(char));
     assert(path != NULL);
@@ -20,11 +43,14 @@ void **split_request(char *req) {
     assert(host != NULL);
     int *port = malloc(sizeof(int));
     assert(port != NULL);
+
     *port = 0;
     u_int32_t i = 0;
     void **arr = malloc(sizeof(void *) * 3);
     assert(arr != NULL);
     char *path_loc;
+    
+    // Get host url (without port)
     char *host_loc = strstr(req, host_string) + 6;
     while ((*host_loc != ' ' && *host_loc != ':') && 
                 (*host_loc != '\r' && *host_loc != '\n')) {
@@ -33,6 +59,8 @@ void **split_request(char *req) {
         host_loc = host_loc + 1;
     }
     host[i] = '\0';
+
+    // Get path (following host url)
     i = 0;
     path_loc = strstr(req, host) + strlen(host);
     if (path_loc == NULL) {
@@ -44,13 +72,20 @@ void **split_request(char *req) {
         path_loc = path_loc + 1;
     }
     path[i] = '\0';
+
+    
+
+
+    // Get port number
     if (*host_loc == ' ' || *host_loc == '\r') {
+        // No port is specified after host url
         *port = 80;
         arr[0] = path;
         arr[1] = host; 
         arr[2] = port;
         return arr;
     } else {
+        // port is specified after host url (following the ':' char)
         host_loc = host_loc + 1;
         while (*host_loc != ' ' && *host_loc != '\r') {
             if (*port > 0) {
