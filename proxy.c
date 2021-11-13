@@ -11,10 +11,13 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <sys/time.h>
 #include "parse.h"
 #include "client.h"
 #include "server.h"
 #include "cache.h"
+
+#define TIMEOUT 3
 
 struct proxy_params {
     int connfd;
@@ -31,41 +34,185 @@ struct C
 
 pthread_mutex_t lock;
 
+/* handle_connect_req - creates a tunnel between client and server, passing
+ *                      data to and from without modification.
+ *   args:
+ *     - int client_fd
+ *     - int server_fd
+ *   
+ *   returns: 
+ *     - none
+ * 
+ * Uses select() to pass messages back and forth between client and server
+ * until one of them disconnects. When one party disconnects, this function 
+ * terminates.
+ */ 
+void handle_connect_req(int client_fd, char *req)
+{
+    int client_r_fd, server_r_fd, client_w_fd, server_w_fd;
+    struct timeval timeout;
+    fd_set fdset;
+    int max_fd;
+    char buf[10000];
+    const char *connection_established = "HTTP/1.0 200 Connection established\r\n\r\n";
+
+    ///////////////////////////////
+    int server_fd, n, optval;
+    int *portno;
+    u_int32_t res_sz = 0;
+    struct sockaddr_in serveraddr;
+    struct hostent *server;
+    char *hostname;
+    if (buf == NULL) {
+      error("Error allocating buffer");
+    }
+    void **arr = split_request(req);
+
+    /* socket: create the socket */
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) 
+        error("ERROR opening socket");
+
+    optval = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, 
+	            (const void *)&optval , sizeof(int));
+
+    /* gethostbyname: get the server's DNS entry */
+    hostname = arr[1];
+    server = gethostbyname(hostname);
+    if (server == NULL) {
+        printf("here\n");
+        invalid_hostname(hostname);
+    }
+    portno = arr[2];
+    /* build the server's Internet address */
+    bzero((char *) &serveraddr, sizeof(serveraddr));
+    serveraddr.sin_family = AF_INET;
+    bcopy((char *)server->h_addr, 
+	  (char *)&serveraddr.sin_addr.s_addr, server->h_length);
+    serveraddr.sin_port = htons(*portno);
+
+    ///////////////////////////////
+
+    /* connect: create a connection with the server */
+    if (connect(server_fd, &serveraddr, sizeof(serveraddr)) < 0) {
+      error("ERROR connecting");
+    } else {
+        printf("proxy connected to server\n");
+        n = write(client_fd, connection_established, strlen(connection_established));
+        if (n < 0) {
+            error("ERROR couldnt write to client");
+            // TODO: handle error
+        }
+        printf("proxy successful sent response to client after connection\n");
+    }
+
+    client_r_fd = client_fd;
+    server_r_fd = fileno(fdopen(server_fd, "r"));
+    client_w_fd = client_fd;
+    server_w_fd = fileno(fdopen(server_fd, "w"));
+    timeout.tv_sec = TIMEOUT;
+    timeout.tv_usec = 0;
+    
+    
+    while (1) {
+        max_fd = client_r_fd >= server_r_fd ? client_r_fd : server_r_fd;
+
+        FD_ZERO( &fdset );
+        FD_SET( client_r_fd, &fdset );
+        FD_SET( server_r_fd, &fdset );
+        n = select( max_fd + 1, &fdset, (fd_set*) 0, (fd_set*) 0, &timeout );
+        if ( n == 0 ) {
+            // TODO: handle error
+            return;
+        }
+        else if ( FD_ISSET( client_r_fd, &fdset ) )
+        {
+            n = read( client_r_fd, buf, sizeof( buf ) );
+            // TODO: handle error
+            // TODO: handle disconnection
+            if ( n <= 0 )
+                break;
+            n = write( server_w_fd, buf, n );
+
+            // TODO: handle error
+            if ( n <= 0 )
+                break;
+        }
+        else if ( FD_ISSET( server_r_fd, &fdset ) )
+        {
+            n = read( server_r_fd, buf, sizeof( buf ) );
+            // TODO: handle error
+            // TODO: handle disconnection
+            if ( n <= 0 )
+                break;
+            n = write( client_w_fd, buf, n );
+
+            // TODO: handle error
+            if ( n <= 0 )
+                break;
+        }
+    }
+}
+
 void *proxy_fun(void *args) {
     struct proxy_params *ps = args;
     int connfd = ps->connfd;
     Cache_T c = ps->c;
     pthread_t *currthread = ps->t;
     char *req, *res, *uri;
+    char *req_type;
     printf("Starting thread for %d\n", connfd);
 
     req = read_client_req(connfd);
+    req_type = get_req_type(req); // either "CONNECT" or "GET"
     uri = make_uri(split_request(req));
     printf("%s, thread conn %d\n", uri, connfd);
-    pthread_mutex_lock(&lock);
-    res = cache_get(c, uri);
-    
-    if (res == NULL) {
-        res = get_server_response(req);
-        if (check_header(res, "max-age=") != NULL) {
-            cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
+
+    if (strcmp(req_type, "GET") == 0) {
+        printf("GET request\n");
+        // Handle GET request
+        pthread_mutex_lock(&lock);
+        res = cache_get(c, uri);
+        
+        if (res == NULL) {
+            // response not found in cache --> request from server
+            res = get_server_response(req);
+            if (check_header(res, "max-age=") != NULL) {
+                cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
+            } else {
+                cache_put(c, uri, res, 3600);
+            }
+            printf("Fetched %s from server\n", uri);
+            write_client_response(connfd, res);
+            
         } else {
-            cache_put(c, uri, res, 3600);
+            // response found in cache --> send back to client
+            printf("Fetched %s from cache\n", uri);
+            res = add_header(res, cache_ttl(c, uri));
+            write_client_response(connfd, res);
+            free(res);
         }
-        printf("Fetched %s from server\n", uri);
-        write_client_response(connfd, res);
+        pthread_mutex_unlock(&lock);
+        printf("GET response sent for socket %d\n", connfd);
+        // free(req);
+        // free(ps);
+        close(connfd);
+        pthread_exit(NULL);
+    } else if (strcmp(req_type, "CONNECT") == 0) {
+        printf("CONNECT request\n");
+        handle_connect_req(connfd, req);
+        // Handle CONNECT request
     } else {
-        printf("Fetched %s from cache\n", uri);
-        res = add_header(res, cache_ttl(c, uri));
-        write_client_response(connfd, res);
-        free(res);
+        printf("request not GET or CONNECT");
+        // TODO: handle error (not a GET or CONNECT request)
     }
-    pthread_mutex_unlock(&lock);
-    printf("Response Sent for %d\n", connfd);
     free(req);
     free(ps);
+    free(uri);
     close(connfd);
-    pthread_exit(NULL);
+
+    
 }
 
 int main(int argc, char **argv)
