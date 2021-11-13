@@ -23,13 +23,12 @@ char *get_req_type(char *req)
     if (strstr(req, "GET ") != NULL) {
         return "GET";
     }
-
-    if (strstr(req, "CONNECT ") != NULL) {
+    else if (strstr(req, "CONNECT ") != NULL) {
         return "CONNECT";
     }
-
-    // TODO: handle error
-    return NULL;
+    else {
+        return NULL;
+    }
 }
 
 /* returns arr with [path, host, port (if exists)] */

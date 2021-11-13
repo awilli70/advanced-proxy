@@ -16,6 +16,7 @@
 #include "client.h"
 #include "server.h"
 #include "cache.h"
+#include "error.h"
 
 #define TIMEOUT 3
 
@@ -81,7 +82,6 @@ void handle_connect_req(int client_fd, char *req)
     hostname = arr[1];
     server = gethostbyname(hostname);
     if (server == NULL) {
-        printf("here\n");
         invalid_hostname(hostname);
     }
     portno = arr[2];
@@ -212,8 +212,7 @@ void *proxy_fun(void *args) {
         printf("CONNECT request\n");
         handle_connect_req(connfd, req);
     } else {
-        printf("request not GET or CONNECT");
-        // TODO: handle error (not a GET or CONNECT request)
+        error("request not GET or CONNECT");
     }
     free(req);
     free(ps);

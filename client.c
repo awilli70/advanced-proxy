@@ -41,7 +41,6 @@ char* get_server_response(char *req) {
     hostname = arr[1];
     server = gethostbyname(hostname);
     if (server == NULL) {
-        printf("here\n");
         invalid_hostname(hostname);
     }
     portno = arr[2];
