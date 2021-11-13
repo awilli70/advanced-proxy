@@ -98,13 +98,15 @@ void handle_connect_req(int client_fd, char *req)
     if (connect(server_fd, &serveraddr, sizeof(serveraddr)) < 0) {
       error("ERROR connecting");
     } else {
-        printf("proxy connected to server\n");
-        n = write(client_fd, connection_established, strlen(connection_established));
-        if (n < 0) {
-            error("ERROR couldnt write to client");
-            // TODO: handle error
-        }
-        printf("proxy successful sent response to client after connection\n");
+      // Connection succesfully established with server
+      printf("proxy connected to server\n");
+      // Write HTTP 200 message back to client before tunnel is actually made
+      n = write(client_fd, connection_established, strlen(connection_established));
+      if (n < 0) {
+        error("ERROR couldnt write to client");
+        // TODO: handle error
+      }
+      printf("proxy successful sent response to client after connection\n");
     }
 
     client_r_fd = client_fd;
@@ -114,7 +116,7 @@ void handle_connect_req(int client_fd, char *req)
     timeout.tv_sec = TIMEOUT;
     timeout.tv_usec = 0;
     
-    
+    // Create tunnel to send messages directly between client and server
     while (1) {
         max_fd = client_r_fd >= server_r_fd ? client_r_fd : server_r_fd;
 
@@ -128,6 +130,7 @@ void handle_connect_req(int client_fd, char *req)
         }
         else if ( FD_ISSET( client_r_fd, &fdset ) )
         {
+            // Client has something to say
             n = read( client_r_fd, buf, sizeof( buf ) );
             // TODO: handle error
             // TODO: handle disconnection
@@ -141,6 +144,7 @@ void handle_connect_req(int client_fd, char *req)
         }
         else if ( FD_ISSET( server_r_fd, &fdset ) )
         {
+            // Server has something to say
             n = read( server_r_fd, buf, sizeof( buf ) );
             // TODO: handle error
             // TODO: handle disconnection
@@ -153,6 +157,12 @@ void handle_connect_req(int client_fd, char *req)
                 break;
         }
     }
+
+    // only closing server fds because client_fd is closed after this function
+    // is called in proxy_fun
+    close(server_r_fd);
+    close(server_w_fd);
+    close(server_fd);
 }
 
 void *proxy_fun(void *args) {
@@ -170,13 +180,13 @@ void *proxy_fun(void *args) {
     printf("%s, thread conn %d\n", uri, connfd);
 
     if (strcmp(req_type, "GET") == 0) {
-        printf("GET request\n");
         // Handle GET request
+        printf("GET request\n");
         pthread_mutex_lock(&lock);
         res = cache_get(c, uri);
         
         if (res == NULL) {
-            // response not found in cache --> request from server
+            // response not found in cache --> request from server, cache, send
             res = get_server_response(req);
             if (check_header(res, "max-age=") != NULL) {
                 cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
@@ -187,7 +197,7 @@ void *proxy_fun(void *args) {
             write_client_response(connfd, res);
             
         } else {
-            // response found in cache --> send back to client
+            // response found in cache --> send back to client w/ new header
             printf("Fetched %s from cache\n", uri);
             res = add_header(res, cache_ttl(c, uri));
             write_client_response(connfd, res);
@@ -195,14 +205,12 @@ void *proxy_fun(void *args) {
         }
         pthread_mutex_unlock(&lock);
         printf("GET response sent for socket %d\n", connfd);
-        // free(req);
-        // free(ps);
         close(connfd);
         pthread_exit(NULL);
     } else if (strcmp(req_type, "CONNECT") == 0) {
+        // Handle CONNECT request
         printf("CONNECT request\n");
         handle_connect_req(connfd, req);
-        // Handle CONNECT request
     } else {
         printf("request not GET or CONNECT");
         // TODO: handle error (not a GET or CONNECT request)
@@ -211,8 +219,6 @@ void *proxy_fun(void *args) {
     free(ps);
     free(uri);
     close(connfd);
-
-    
 }
 
 int main(int argc, char **argv)
