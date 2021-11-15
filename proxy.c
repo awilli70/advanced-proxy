@@ -207,8 +207,6 @@ void *proxy_fun(void *args) {
             free(res);
         }
         printf("GET response sent for socket %d\n", connfd);
-        close(connfd);
-        pthread_exit(NULL);
     } else if (strcmp(req_type, "CONNECT") == 0) {
         // Handle CONNECT request
         printf("CONNECT request\n");
@@ -220,6 +218,7 @@ void *proxy_fun(void *args) {
     free(ps);
     free(uri);
     close(connfd);
+    pthread_exit(NULL);
 }
 
 int main(int argc, char **argv)
