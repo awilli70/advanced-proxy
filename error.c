@@ -14,6 +14,18 @@ void error(char *msg) {
     exit(0);
 }
 
+/* handle_error
+ * 
+ * Gracefully close socket and thread, keep proxy running.
+ */
+void handle_error(int socket, pthread_t thread)
+{
+    printf("Handling error on socket %d\n", socket);
+    close(socket);
+    pthread_cancel(thread);
+    printf("Done handling error on socket %d\n", socket);
+}
+
 void invalid_hostname(char *hostname) {
     char msg[] = "ERROR, no such host as ";
     strcat(msg, hostname);
