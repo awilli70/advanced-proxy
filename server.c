@@ -16,7 +16,7 @@
 #include "client.h"
 #include "parse.h"
 
-#define REQBUFSIZE (1024 * 1024)
+#define REQBUFSIZE 4096
 
 #if 0
 /* 
