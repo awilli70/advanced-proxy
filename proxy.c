@@ -30,7 +30,6 @@ struct C
 {
     struct Q *objs;
     struct H *refs;
-    pthread_mutex_t lock;
 };
 
 pthread_mutex_t lock;
@@ -184,14 +183,18 @@ void *proxy_fun(void *args) {
         printf("GET request\n");
         pthread_mutex_lock(&lock);
         res = cache_get(c, uri);
-        
+        pthread_mutex_unlock(&lock);
         if (res == NULL) {
             // response not found in cache --> request from server, cache, send
             res = get_server_response(req);
             if (check_header(res, "max-age=") != NULL) {
+                pthread_mutex_lock(&lock);
                 cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
+                pthread_mutex_unlock(&lock);
             } else {
+                pthread_mutex_lock(&lock);
                 cache_put(c, uri, res, 3600);
+                pthread_mutex_unlock(&lock);
             }
             printf("Fetched %s from server\n", uri);
             write_client_response(connfd, res);
@@ -203,7 +206,6 @@ void *proxy_fun(void *args) {
             write_client_response(connfd, res);
             free(res);
         }
-        pthread_mutex_unlock(&lock);
         printf("GET response sent for socket %d\n", connfd);
         close(connfd);
         pthread_exit(NULL);
