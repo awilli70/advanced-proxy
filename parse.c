@@ -16,7 +16,7 @@
  *   return:
  *     - char *req_type: "GET" if req is a GET request
  *                       "CONNECT" if req is a CONNECT request
- *                       Otherwise, error
+ *                       Otherwise, return NULL
  */
 char *get_req_type(char *req)
 {
