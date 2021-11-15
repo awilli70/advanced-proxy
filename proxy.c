@@ -19,6 +19,7 @@
 #include "error.h"
 
 #define TIMEOUT 3
+#define BUFSIZE (10 * 1024 * 1024)
 
 struct proxy_params {
     int connfd;
@@ -53,7 +54,8 @@ void handle_connect_req(int client_fd, char *req)
     struct timeval timeout;
     fd_set fdset;
     int max_fd;
-    char buf[10000];
+    char buf = malloc(sizeof(char) * BUFSIZE);
+    assert(buf != NULL);
     const char *connection_established = "HTTP/1.0 200 Connection established\r\n\r\n";
 
     ///////////////////////////////
@@ -63,9 +65,6 @@ void handle_connect_req(int client_fd, char *req)
     struct sockaddr_in serveraddr;
     struct hostent *server;
     char *hostname;
-    if (buf == NULL) {
-      error("Error allocating buffer");
-    }
     void **arr = split_request(req);
 
     /* socket: create the socket */
