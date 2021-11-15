@@ -23,9 +23,8 @@ char* get_server_response(char *req) {
     struct hostent *server;
     char *hostname;
     char *buf = malloc(sizeof(char) * BUFSIZE);
-    if (buf == NULL) {
-      error("Error allocating buffer");
-    }
+    assert(buf != NULL);
+
     void **arr = split_request(req);
 
     /* socket: create the socket */
