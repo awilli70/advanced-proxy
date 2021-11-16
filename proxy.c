@@ -17,6 +17,7 @@
 #include "server.h"
 #include "cache.h"
 #include "error.h"
+#include "assert.h"
 
 #define TIMEOUT 3
 #define BUFSIZE (10 * 1024 * 1024)
