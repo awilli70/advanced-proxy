@@ -11,7 +11,7 @@
 #include <netdb.h> 
 #include "parse.h"
 #include "error.h"
-#include "assert.h"
+#include <assert.h>
 
 #define BUFSIZE (10 * 1024 * 1024)
 
