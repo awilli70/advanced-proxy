@@ -65,15 +65,12 @@ void **split_request(char *req) {
     if (path_loc == NULL) {
         path_loc = strstr(req, "/");
     }
-    while (*path_loc != ' ') {
+    while (*path_loc != ' ' && *path_loc != ':') {
         path[i] = *path_loc;
         i++;
         path_loc = path_loc + 1;
     }
     path[i] = '\0';
-
-    
-
 
     // Get port number
     if (*host_loc == ' ' || *host_loc == '\r') {
