@@ -10,14 +10,14 @@
 typedef struct H *H;
 #define N Node_T
 
-extern H initialize_table(u_int32_t);
+extern H initialize_table(uint32_t);
 extern void free_table(H);
 extern void pretty_print_table(H);
 
 extern char *node_key(N);
 extern N list_ptr(N);
-extern u_int32_t curr_blocks(H);
-extern u_int32_t hash_size(H);
+extern uint32_t curr_blocks(H);
+extern uint32_t hash_size(H);
 
 /* search by key */
 extern N hash_search(H, char *);

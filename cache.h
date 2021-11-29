@@ -13,11 +13,11 @@ typedef struct C *C;
 #define Q Queue_T
 #define H Hash_T
 
-extern C initialize_cache(u_int32_t);
+extern C initialize_cache(uint32_t);
 extern void free_cache(C);
 
-extern C cache_put(C, char *, char *, u_int32_t);
+extern C cache_put(C, char *, char *, uint32_t);
 extern char *cache_get(C, char *);
-extern u_int32_t cache_ttl(C, char *);
+extern uint32_t cache_ttl(C, char *);
 
 #endif

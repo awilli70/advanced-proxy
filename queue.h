@@ -19,7 +19,7 @@ extern N tail(Q);
 extern char *data(N);
 
 /* Adds to head of queue, returns nothing */
-extern Q push(Q, char *, char *, u_int32_t, N);
+extern Q push(Q, char *, char *, uint32_t, N);
 /* Removes from tail of queue, returns nothing */
 extern Q pop(Q);
 /* Move node to address */
