@@ -23,6 +23,8 @@ char *get_req_type(char *req) {
     return "GET";
   } else if (strstr(req, "CONNECT ") != NULL) {
     return "CONNECT";
+  } else if (strstr(req, "JOIN-") != NULL) {
+    return "JOIN";
   } else {
     return NULL;
   }

@@ -58,8 +58,6 @@ int get_client_connfd(int listenfd) {
   int clientlen = sizeof(clientaddr);
 
   connfd = accept(listenfd, (struct sockaddr *)&clientaddr, &clientlen);
-  if (connfd < 0)
-    error("ERROR on accept");
 
   /* gethostbyaddr: determine who sent the message */
   hostp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr,
@@ -94,6 +92,7 @@ void write_client_response(int connfd, char *buf) {
   uint32_t i = 0;
   int n = 0;
   uint32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
+  printf("Header length: %d\n", header_length);
   i = parse_int_from_header(buf, "Content-Length: ");
   if (i != (10 * REQBUFSIZE)) {
     n = write(connfd, buf, sizeof(char) * (i + header_length));
