@@ -42,6 +42,8 @@ struct node_params {
   int fd;
   int idx;
   Cache_T c;
+  int *node_fds;
+  uint32_t *nodeflags;
 };
 
 struct __attribute__((__packed__)) Bootstrap {
@@ -195,11 +197,12 @@ void handle_connect_req(int client_fd, char *req) {
 }
 
 /* Thread function per node in cooperative cache */
-// TODO: Handle error when read fails
 void *node_fun(void *args) {
   struct node_params *ns = args;
   int fd = ns->fd;
   int idx = ns->idx;
+  uint32_t *node_flags = ns->nodeflags;
+  int *node_fds = ns->node_fds;
   Cache_T c = ns->c;
   uint32_t bytes;
   uint32_t tot_bytes;
@@ -210,9 +213,23 @@ void *node_fun(void *args) {
     bytes = 0;
     tot_bytes = 0;
     bytes = read(fd, buf, 1024);
+    if (bytes <= 0) {
+      int mask = 1 << (31 - idx);
+      *node_flags = *node_flags ^ mask;
+      node_fds[idx] = 0;
+      printf("Node failure detected for %d, closing thread\n", fd);
+      pthread_exit(NULL);
+    }
     tot_bytes = bytes;
     while (bytes == 1024) {
       bytes = read(fd, buf + bytes, 1024);
+      if (bytes <= 0) {
+        int mask = 1 << (31 - idx);
+        *node_flags = *node_flags ^ mask;
+        node_fds[idx] = 0;
+        printf("Node failure detected for %d, closing thread\n", fd);
+        pthread_exit(NULL);
+      }
       tot_bytes += bytes;
     }
 
@@ -331,6 +348,8 @@ void join_coop_cache(char *local_hostname, int local_port, char *node_hostname,
         ns->fd = sockfd;
         ns->idx = 31 - shifts;
         ns->c = c;
+        ns->nodeflags = flags;
+        ns->node_fds = fds;
         pthread_create(n, NULL, node_fun, ns);
       } else {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -373,6 +392,8 @@ void join_coop_cache(char *local_hostname, int local_port, char *node_hostname,
           ns->fd = fd;
           ns->idx = 31 - shifts;
           ns->c = c;
+          ns->nodeflags = flags;
+          ns->node_fds = fds;
           pthread_create(n, NULL, node_fun, ns);
         }
       }
@@ -427,6 +448,8 @@ void handle_node_join(int connfd, uint32_t *node_fds, uint32_t *nodeflags,
   ns->fd = connfd;
   ns->idx = 31 - shifts;
   ns->c = c;
+  ns->nodeflags = nodeflags;
+  ns->node_fds = node_fds;
   pthread_create(n, NULL, node_fun, ns);
 }
 
@@ -605,7 +628,6 @@ int main(int argc, char **argv) {
     *nodemask = 1;
     strcpy(node_conn_info[31].hostname, argv[1]);
     node_conn_info[31].port = (unsigned short)portno;
-    printf("%s\n", node_conn_info[31].hostname);
   } else {
     join_coop_cache(argv[1], portno, argv[3], argv[4], node_fds, listenfd,
                     nodeflags, nodemask, node_conn_info, c);
