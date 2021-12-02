@@ -117,7 +117,10 @@ void handle_connect_req(int client_fd, char *req) {
   if (server == NULL) {
     // invalid_hostname(hostname);
     close(server_fd);
-    handle_error(client_fd, pthread_self());
+    printf("what???\n");
+    close(client_fd);
+    pthread_exit(NULL);
+    // handle_error(client_fd, pthread_self());
   }
   portno = arr[2];
   /* build the server's Internet address */
@@ -272,7 +275,7 @@ void *node_fun(void *args) {
       if (res == NULL) {
         // response not found in cache --> request from server, cache,
         // send
-        res = get_server_response(buf);
+        res = get_server_response(fd, buf);
         if (check_header(res, "max-age=") != NULL) {
           pthread_mutex_lock(&lock);
           cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
@@ -543,7 +546,7 @@ void *proxy_fun(void *args) {
       if (res == NULL) {
         // response not found in cache --> request from server, cache,
         // send
-        res = get_server_response(req);
+        res = get_server_response(connfd, req);
         if (check_header(res, "max-age=") != NULL) {
           pthread_mutex_lock(&lock);
           cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
