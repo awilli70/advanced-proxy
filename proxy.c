@@ -128,15 +128,9 @@ void handle_connect_req(int client_fd, char *req) {
   serveraddr.sin_port = htons(*portno);
 
   /* connect: create a connection with the server */
-<<<<<<< HEAD
   if (connect(server_fd, &serveraddr, sizeof(serveraddr)) < 0) {
     close(server_fd);
     handle_error(client_fd, pthread_self());
-=======
-  if (connect(server_fd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) <
-      0) {
-    error("ERROR connecting");
->>>>>>> 4d8f66479052d660ebe0b6f3244d70635b46204b
   } else {
     // Connection succesfully established with server
     printf("proxy connected to server\n");
@@ -670,14 +664,11 @@ int main(int argc, char **argv) {
   }
   while (1) {
     connfd = get_client_connfd(listenfd);
-<<<<<<< HEAD
     if (connfd < 0) {
       // Error raised when trying to connect to client socket
       continue;
     }
     char *buf = malloc(sizeof(char) * 11);
-=======
->>>>>>> 4d8f66479052d660ebe0b6f3244d70635b46204b
     p = malloc(sizeof(pthread_t));
     struct proxy_params *ps = malloc(sizeof(struct proxy_params));
     ps->c = c;
