@@ -218,6 +218,7 @@ void *node_fun(void *args) {
       *node_flags = *node_flags ^ mask;
       node_fds[idx] = 0;
       printf("Node failure detected for %d, closing thread\n", fd);
+      close(fd);
       pthread_exit(NULL);
     }
     tot_bytes = bytes;
@@ -228,6 +229,7 @@ void *node_fun(void *args) {
         *node_flags = *node_flags ^ mask;
         node_fds[idx] = 0;
         printf("Node failure detected for %d, closing thread\n", fd);
+        close(fd);
         pthread_exit(NULL);
       }
       tot_bytes += bytes;
