@@ -16,6 +16,8 @@
  *               Otherwise, error
  */
 char *get_req_type(char *);
+/* determines if char * is a response, GET, CONNECT, or none */
+char *get_read_type(char *);
 
 /* split_request(char *req) 
  *   args:

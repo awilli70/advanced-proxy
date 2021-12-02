@@ -52,13 +52,34 @@ struct hostent {
 }
 #endif
 
+void *memmem(const void *haystack, size_t hlen, const void *needle,
+             size_t nlen) {
+  int needle_first;
+  const void *p = haystack;
+  size_t plen = hlen;
+
+  if (!nlen)
+    return NULL;
+
+  needle_first = *(unsigned char *)needle;
+
+  while (plen >= nlen && (p = memchr(p, needle_first, plen - nlen + 1))) {
+    if (!memcmp(p, needle, nlen))
+      return (void *)p;
+
+    p++;
+    plen = hlen - (p - haystack);
+  }
+
+  return NULL;
+}
+
 int get_client_connfd(int listenfd) {
   int connfd;                    /* connection socket */
   struct sockaddr_in clientaddr; /* client addr */
   struct hostent *hostp;         /* client host info */
   char *hostaddrp;               /* dotted decimal host addr string */
   int clientlen = sizeof(clientaddr);
-
   connfd = accept(listenfd, (struct sockaddr *)&clientaddr, &clientlen);
   if (connfd < 0)
     return -1; // Error handling: Don't want to kill this main thread or close listenfd
@@ -86,7 +107,7 @@ char *read_client_req(int connfd) {
     handle_error(connfd, pthread_self());
   }
   i += n;
-  while (strstr(buf, "\r\n\r\n") == NULL) {
+  while (memmem(buf, i, "\r\n\r\n", 4) == NULL) {
     n = read(connfd, buf + i, 1024);
 
     if (n < 0) {
@@ -103,6 +124,7 @@ void write_client_response(int connfd, char *buf) {
   uint32_t i = 0;
   int n = 0;
   uint32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
+  printf("Header length: %d\n", header_length);
   i = parse_int_from_header(buf, "Content-Length: ");
   if (i != (10 * REQBUFSIZE)) {
     n = write(connfd, buf, sizeof(char) * (i + header_length));

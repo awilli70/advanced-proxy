@@ -23,8 +23,18 @@ char *get_req_type(char *req) {
     return "GET";
   } else if (strstr(req, "CONNECT ") != NULL) {
     return "CONNECT";
+  } else if (strstr(req, "JOIN-") != NULL) {
+    return "JOIN";
   } else {
     return NULL;
+  }
+}
+
+char *get_read_type(char *req) {
+  if (strncmp(req, "HTTP", 4) == 0) {
+    return "RES";
+  } else {
+    return get_req_type(req);
   }
 }
 

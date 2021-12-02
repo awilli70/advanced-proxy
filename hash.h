@@ -18,6 +18,7 @@ extern char *node_key(N);
 extern N list_ptr(N);
 extern uint32_t curr_blocks(H);
 extern uint32_t hash_size(H);
+extern uint32_t hash(char *);
 
 /* search by key */
 extern N hash_search(H, char *);
