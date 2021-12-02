@@ -128,7 +128,7 @@ void write_client_response(int connfd, char *buf) {
   i = parse_int_from_header(buf, "Content-Length: ");
   if (i != (10 * REQBUFSIZE)) {
     n = write(connfd, buf, sizeof(char) * (i + header_length));
-    assert(n == sizeof(char) * (i + header_length));
+    // assert(n == sizeof(char) * (i + header_length));
   } else {
     n = write(connfd, buf, sizeof(char) * i);
   }
