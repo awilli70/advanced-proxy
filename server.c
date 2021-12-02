@@ -50,13 +50,34 @@ struct hostent {
 }
 #endif
 
+void *memmem(const void *haystack, size_t hlen, const void *needle,
+             size_t nlen) {
+  int needle_first;
+  const void *p = haystack;
+  size_t plen = hlen;
+
+  if (!nlen)
+    return NULL;
+
+  needle_first = *(unsigned char *)needle;
+
+  while (plen >= nlen && (p = memchr(p, needle_first, plen - nlen + 1))) {
+    if (!memcmp(p, needle, nlen))
+      return (void *)p;
+
+    p++;
+    plen = hlen - (p - haystack);
+  }
+
+  return NULL;
+}
+
 int get_client_connfd(int listenfd) {
   int connfd;                    /* connection socket */
   struct sockaddr_in clientaddr; /* client addr */
   struct hostent *hostp;         /* client host info */
   char *hostaddrp;               /* dotted decimal host addr string */
   int clientlen = sizeof(clientaddr);
-
   connfd = accept(listenfd, (struct sockaddr *)&clientaddr, &clientlen);
 
   /* gethostbyaddr: determine who sent the message */
@@ -81,7 +102,7 @@ char *read_client_req(int connfd) {
   if (n < 0)
     error("ERROR reading from socket");
   i += n;
-  while (strstr(buf, "\r\n\r\n") == NULL) {
+  while (memmem(buf, i, "\r\n\r\n", 4) == NULL) {
     n = read(connfd, buf + i, 1024);
     i += n;
   }

@@ -30,6 +30,14 @@ char *get_req_type(char *req) {
   }
 }
 
+char *get_read_type(char *req) {
+  if (strncmp(req, "HTTP", 4) == 0) {
+    return "RES";
+  } else {
+    return get_req_type(req);
+  }
+}
+
 /* returns arr with [path, host, port (if exists)] */
 void **split_request(char *req) {
   // char *get_string = "GET ";
