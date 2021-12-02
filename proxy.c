@@ -57,7 +57,6 @@ void handle_connect_req(int client_fd, char *req) {
   assert(buf != NULL);
   const char *connection_established = "HTTP/1.1 200 OK\r\n\r\n";
 
-  ///////////////////////////////
   int server_fd, n, optval;
   int *portno;
   uint32_t res_sz = 0;
@@ -68,8 +67,9 @@ void handle_connect_req(int client_fd, char *req) {
 
   /* socket: create the socket */
   server_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (server_fd < 0)
-    error("ERROR opening socket");
+  if (server_fd < 0) {
+    handle_error(client_fd, pthread_self());
+  }
 
   optval = 1;
   setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval,
@@ -79,7 +79,9 @@ void handle_connect_req(int client_fd, char *req) {
   hostname = arr[1];
   server = gethostbyname(hostname);
   if (server == NULL) {
-    invalid_hostname(hostname);
+    // invalid_hostname(hostname);
+    close(server_fd);
+    handle_error(client_fd, pthread_self());
   }
   portno = arr[2];
   /* build the server's Internet address */
@@ -89,11 +91,10 @@ void handle_connect_req(int client_fd, char *req) {
         server->h_length);
   serveraddr.sin_port = htons(*portno);
 
-  ///////////////////////////////
-
   /* connect: create a connection with the server */
   if (connect(server_fd, &serveraddr, sizeof(serveraddr)) < 0) {
-    error("ERROR connecting");
+    close(server_fd);
+    handle_error(client_fd, pthread_self());
   } else {
     // Connection succesfully established with server
     printf("proxy connected to server\n");
@@ -101,8 +102,9 @@ void handle_connect_req(int client_fd, char *req) {
     n = write(client_fd, connection_established,
               strlen(connection_established));
     if (n < 0) {
-      error("ERROR couldnt write to client");
-      // TODO: handle error
+      // error("ERROR couldnt write to client");
+      close(server_fd);
+      handle_error(client_fd, pthread_self());
     }
     printf("proxy successful sent response to client after connection\n");
   }
@@ -122,33 +124,59 @@ void handle_connect_req(int client_fd, char *req) {
     FD_SET(client_r_fd, &fdset);
     FD_SET(server_r_fd, &fdset);
     n = select(max_fd + 1, &fdset, (fd_set *)0, (fd_set *)0, &timeout);
-    if (n == 0) {
-      // TODO: handle error
+    if (n <= 0) {
+      close(server_r_fd);
+      close(server_w_fd);
+      close(client_r_fd);
+      close(client_w_fd);
+      handle_error(client_fd, pthread_self());
       return;
     } else if (FD_ISSET(client_r_fd, &fdset)) {
       // Client has something to say
       n = read(client_r_fd, buf, sizeof(buf));
-      // TODO: handle error
-      // TODO: handle disconnection
-      if (n <= 0)
-        break;
+
+      if (n <= 0) {
+        close(server_r_fd);
+        close(server_w_fd);
+        close(client_r_fd);
+        close(client_w_fd);
+        handle_error(client_fd, pthread_self());
+        return;
+      }
+
       n = write(server_w_fd, buf, n);
 
-      // TODO: handle error
-      if (n <= 0)
-        break;
+      if (n < 0) {
+        close(server_r_fd);
+        close(server_w_fd);
+        close(client_r_fd);
+        close(client_w_fd);
+        handle_error(client_fd, pthread_self());
+        return;
+      }
     } else if (FD_ISSET(server_r_fd, &fdset)) {
       // Server has something to say
       n = read(server_r_fd, buf, sizeof(buf));
-      // TODO: handle error
-      // TODO: handle disconnection
-      if (n <= 0)
-        break;
+
+      if (n <= 0){
+        close(server_r_fd);
+        close(server_w_fd);
+        close(client_r_fd);
+        close(client_w_fd);
+        handle_error(client_fd, pthread_self());
+        return;
+      }
+
       n = write(client_w_fd, buf, n);
 
-      // TODO: handle error
-      if (n <= 0)
-        break;
+      if (n < 0) {
+        close(server_r_fd);
+        close(server_w_fd);
+        close(client_r_fd);
+        close(client_w_fd);
+        handle_error(client_fd, pthread_self());
+        return;
+      }
     }
   }
 
@@ -181,7 +209,7 @@ void *proxy_fun(void *args) {
     pthread_mutex_unlock(&lock);
     if (res == NULL) {
       // response not found in cache --> request from server, cache, send
-      res = get_server_response(req);
+      res = get_server_response(connfd, req);
       if (check_header(res, "max-age=") != NULL) {
         pthread_mutex_lock(&lock);
         cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
@@ -207,7 +235,8 @@ void *proxy_fun(void *args) {
     printf("CONNECT request\n");
     handle_connect_req(connfd, req);
   } else {
-    error("request not GET or CONNECT");
+    // Not CONNECT or GET request --> error
+    handle_error(connfd, pthread_self());
   }
   free(req);
   free(ps);
@@ -261,6 +290,10 @@ int main(int argc, char **argv) {
   pthread_mutex_init(&lock, NULL);
   while (1) {
     connfd = get_client_connfd(listenfd);
+    if (connfd < 0) {
+      // Error raised when trying to connect to client socket
+      continue;
+    }
     char *buf = malloc(sizeof(char) * 11);
     p = malloc(sizeof(pthread_t));
     struct proxy_params *ps = malloc(sizeof(struct proxy_params));

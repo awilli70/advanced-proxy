@@ -24,8 +24,8 @@ void handle_error(int socket, pthread_t thread)
 {
     printf("Handling error on socket %d\n", socket);
     close(socket);
+    printf("socket %d closed\n", socket);
     pthread_cancel(thread);
-    printf("Done handling error on socket %d\n", socket);
 }
 
 void invalid_hostname(char *hostname) {

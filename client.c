@@ -16,8 +16,8 @@
 #define BUFSIZE (10 * 1024 * 1024)
 
 
-char* get_server_response(char *req) {
-    int sockfd, n, optval;
+char* get_server_response(int client_fd, char *req) {
+    int sockfd, n, optval; // sockfd = server_fd
     int *portno;
     u_int32_t res_sz = 0;
     struct sockaddr_in serveraddr;
@@ -41,7 +41,9 @@ char* get_server_response(char *req) {
     hostname = arr[1];
     server = gethostbyname(hostname);
     if (server == NULL) {
-        invalid_hostname(hostname);
+      // TODO: possible change pthread_cancel in handle_error to pthread_exit?
+      close(client_fd);
+      pthread_exit(NULL); // If we use handle_error, then pthread_cancel segfaults
     }
     portno = arr[2];
     /* build the server's Internet address */
@@ -52,29 +54,43 @@ char* get_server_response(char *req) {
     serveraddr.sin_port = htons(*portno);
 
     /* connect: create a connection with the server */
-    if (connect(sockfd, &serveraddr, sizeof(serveraddr)) < 0) 
-      error("ERROR connecting");
+    if (connect(sockfd, &serveraddr, sizeof(serveraddr)) < 0) {
+      close(sockfd);
+      handle_error(client_fd, pthread_self());
+    }
     printf("Connected\n");
     /* send the message line to the server */
     u_int32_t i = (strstr(req, "\r\n\r\n") + 4) - req;
     n = write(sockfd, req, i);
-    if (n < 0) 
-      error("ERROR writing to socket");
+    if (n < 0) {
+      close(sockfd);
+      handle_error(client_fd, pthread_self());
+    }
 
     u_int32_t content_length = BUFSIZE + 1;
     /* print the server's reply */
     bzero(buf, BUFSIZE);
     i = 0;
     n = read(sockfd, buf, 1024);
-    if (n < 0) 
-        error("ERROR reading from socket");
+    if (n < 0) {
+      close(sockfd);
+      handle_error(client_fd, pthread_self());
+    }
+
     i += n;
     while (n > 0 && i < content_length) {
       if (content_length > BUFSIZE && check_header(buf, "Content-Length: ") != NULL) {
         content_length = parse_int_from_header(buf, "Content-Length: ");
         content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
       }
+
       n = read(sockfd, buf + i, 1024);
+
+      if (n <= 0) {
+        close(sockfd);
+        handle_error(client_fd, pthread_self());
+      }
+
       i += n;
     }
     close(sockfd);

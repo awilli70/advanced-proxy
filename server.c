@@ -5,7 +5,9 @@
 
 #include "client.h"
 #include "parse.h"
+#include "error.h"
 #include <arpa/inet.h>
+#include <pthread.h>
 #include <assert.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -59,7 +61,7 @@ int get_client_connfd(int listenfd) {
 
   connfd = accept(listenfd, (struct sockaddr *)&clientaddr, &clientlen);
   if (connfd < 0)
-    error("ERROR on accept");
+    return -1; // Error handling: Don't want to kill this main thread or close listenfd
 
   /* gethostbyaddr: determine who sent the message */
   hostp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr,
@@ -80,11 +82,18 @@ char *read_client_req(int connfd) {
   bzero(buf, REQBUFSIZE);
   uint32_t i = 0;
   n = read(connfd, buf, 1024);
-  if (n < 0)
-    error("ERROR reading from socket");
+  if (n < 0) {
+    handle_error(connfd, pthread_self());
+  }
   i += n;
   while (strstr(buf, "\r\n\r\n") == NULL) {
     n = read(connfd, buf + i, 1024);
+
+    if (n < 0) {
+      handle_error(connfd, pthread_self());
+      break;
+    }
+
     i += n;
   }
   return buf;
@@ -101,7 +110,11 @@ void write_client_response(int connfd, char *buf) {
   } else {
     n = write(connfd, buf, sizeof(char) * i);
   }
-  if (n < 0)
-    error("ERROR writing to socket");
+
+  if (n < 0) {
+    handle_error(connfd, pthread_self());
+    return;
+  }
+
   return;
 }
