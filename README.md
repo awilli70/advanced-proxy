@@ -3,22 +3,21 @@
 This repository contains an implementation of a simple HTTP proxy
 
 It:
-- Is Single Client
-- Is Non-Persistent
+- Is multiclient
 - Has a Shared Proxy Cache
+- Can operate in a Cooperative Cache mode where multiple nodes are connected using a DHT
 
 ## Limitations:
 
 - Max path length of 100 chars
 - Max response length of 10mb
-- Only implements GET
-- Does not handle chunked encoding (will blow up spectacularly)
+- Implements GET and CONNECT only
 
 ## Usage:
 
 Compile with `make`
 
-Run with `./a.out <port>`
+Run with `./a.out <ip> <port> <node ip [OPTIONAL]> <node port[OPTIONAL]>`
 
 ## Files and Dependencies:
 Cache.c is a Queue with O(1) access to every element
@@ -35,10 +34,3 @@ Dependencies:
 - Cache.c
 - Parse.c (also dependency for Server.c and Client.c) is the main file for C string manipulation and repeated tasks
 
-Useful links:
-https://www.linuxhowtos.org/C_C++/socket.htm
-https://en.wikipedia.org/wiki/List_of_HTTP_header_fields
-https://stackoverflow.com/questions/15198834/bind-failed-address-already-in-use
-
-For cache/client:
-https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Age

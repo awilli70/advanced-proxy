@@ -197,7 +197,7 @@ void handle_connect_req(int client_fd, char *req) {
       // Server has something to say
       n = read(server_r_fd, buf, sizeof(buf));
 
-      if (n <= 0){
+      if (n <= 0) {
         close(server_r_fd);
         close(server_w_fd);
         close(client_r_fd);
@@ -235,10 +235,11 @@ void *node_fun(void *args) {
   int *node_fds = ns->node_fds;
   Cache_T c = ns->c;
   uint32_t bytes;
-  uint32_t tot_bytes;
+  int tot_bytes;
   char *req_type, *buf, *uri, *res;
   printf("Starting thread for %d\n", fd);
   while (1) {
+    int content_length = -1;
     buf = malloc(BUFSIZE);
     bytes = 0;
     tot_bytes = 0;
@@ -252,7 +253,11 @@ void *node_fun(void *args) {
       pthread_exit(NULL);
     }
     tot_bytes = bytes;
-    while (bytes == 1024) {
+    while (bytes == 1024 || tot_bytes < content_length) {
+      if (content_length < 0 && check_header(buf, "Content-Length: ") != NULL) {
+        content_length = parse_int_from_header(buf, "Content-Length: ");
+        content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
+      }
       bytes = read(fd, buf + bytes, 1024);
       if (bytes <= 0) {
         int mask = 1 << (31 - idx);
