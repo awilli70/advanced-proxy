@@ -24,7 +24,6 @@ void handle_error(int socket, pthread_t thread)
 {
     printf("(%d) HANDLING ERROR\n", socket);
     close(socket);
-    // pthread_cancel(thread);
     pthread_exit(NULL);
 }
 
