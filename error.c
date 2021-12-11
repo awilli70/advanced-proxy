@@ -22,7 +22,7 @@ void error(char *msg) {
  */
 void handle_error(int socket, pthread_t thread)
 {
-    printf("(%d) HANDLING ERROR\n", socket);
+    printf("(%d) HANDLING ERROR: closing socket and exiting thread\n", socket);
     close(socket);
     pthread_exit(NULL);
 }
