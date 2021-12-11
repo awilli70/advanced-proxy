@@ -12,18 +12,18 @@
 #include <assert.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <unistd.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <stdbool.h>
 #include <time.h>
+#include <unistd.h>
 
 #define TIMEOUT 3
 #define BUFSIZE (10 * 1024 * 1024)
@@ -141,8 +141,7 @@ void handle_connect_req(int client_fd, char *req) {
   } else {
     // Connection succesfully established with server
     // Write HTTP 200 message back to client before tunnel is actually made
-    n = write(client_fd, CONNECT_INIT_RESPONSE,
-              strlen(CONNECT_INIT_RESPONSE));
+    n = write(client_fd, CONNECT_INIT_RESPONSE, strlen(CONNECT_INIT_RESPONSE));
     if (n < 0) {
       // error("ERROR couldnt write to client");
       close(server_fd);
@@ -509,28 +508,6 @@ void handle_node_join(int connfd, uint32_t *node_fds, uint32_t *nodeflags,
   pthread_create(n, NULL, node_fun, ns);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* Thread function for new connections to proxy */
 void *proxy_fun(void *args) {
   struct proxy_params *ps = args;
@@ -627,7 +604,6 @@ void *ssl_proxy_fun(void *args) {
   }
   return;
 
-
   // req = ssl_read_client_req(ssl_client_b_io, ssl_connection, connfd);
   // req_type = get_req_type(req);
   // printf("(%d) ssl_proxy_fun: req_type %s\n", connfd, req_type);
@@ -656,14 +632,13 @@ void *ssl_proxy_fun(void *args) {
   //     printf("Sent\n");
   //     pthread_mutex_lock(&read_locks[31 - shifts]);
   //     while (resbufs[31 - shifts] == NULL) {
-  //       pthread_cond_wait(&read_conds[31 - shifts], &read_locks[31 - shifts]);
+  //       pthread_cond_wait(&read_conds[31 - shifts], &read_locks[31 -
+  //       shifts]);
   //     }
   //     pthread_mutex_unlock(&read_locks[31 - shifts]);
-  //     ssl_write_client_response(ssl_connection, connfd, resbufs[31 - shifts]);
-  //     printf("GET response received and sent\n");
-  //     free(resbufs[31 - shifts]);
-  //     resbufs[31 - shifts] = NULL;
-  //     close(connfd);
+  //     ssl_write_client_response(ssl_connection, connfd, resbufs[31 -
+  //     shifts]); printf("GET response received and sent\n"); free(resbufs[31 -
+  //     shifts]); resbufs[31 - shifts] = NULL; close(connfd);
   //   } else {
   //     printf("GET request\n");
   //     pthread_mutex_lock(&lock);
@@ -696,7 +671,8 @@ void *ssl_proxy_fun(void *args) {
   //   }
   // } else if (strcmp(req_type, "JOIN") == 0) {
   //   // Handle JOIN request for Coop cache
-  //   handle_node_join(connfd, node_fds, nodeflags, nodemask, node_conn_info, req,
+  //   handle_node_join(connfd, node_fds, nodeflags, nodemask, node_conn_info,
+  //   req,
   //                    c);
   // } else {
   //   // Not CONNECT or GET request --> error
@@ -743,12 +719,12 @@ void handle_get_req(void *args, char *req) {
     }
   }
   if (*nodeflags > 1 && mask != *nodemask) {
-  printf("Sending GET request to node %d\n", node_fds[31 - shifts]);
-  write(node_fds[31 - shifts], req, (strstr(req, "\r\n\r\n") + 4) - req);
-  printf("Sent\n");
-  pthread_mutex_lock(&read_locks[31 - shifts]);
-  while (resbufs[31 - shifts] == NULL) {
-    pthread_cond_wait(&read_conds[31 - shifts], &read_locks[31 - shifts]);
+    printf("Sending GET request to node %d\n", node_fds[31 - shifts]);
+    write(node_fds[31 - shifts], req, (strstr(req, "\r\n\r\n") + 4) - req);
+    printf("Sent\n");
+    pthread_mutex_lock(&read_locks[31 - shifts]);
+    while (resbufs[31 - shifts] == NULL) {
+      pthread_cond_wait(&read_conds[31 - shifts], &read_locks[31 - shifts]);
     }
     pthread_mutex_unlock(&read_locks[31 - shifts]);
     write_client_response(connfd, resbufs[31 - shifts]);
@@ -788,36 +764,45 @@ void handle_get_req(void *args, char *req) {
 }
 
 int main(int argc, char **argv) {
-  if (argc < 4) {
-    fprintf(stderr, "usage: %s [-ssl | -nossl] <ip> <port> <node hostname> <node port>\n",
+  if (argc < 3) {
+    fprintf(stderr,
+            "usage: %s <ip> <port> [-multi <node hostname> "
+            "<node port>] [-ssl]\n",
             argv[0]);
     exit(EXIT_FAILURE);
   }
   /* Initial server socket creation */
   int listenfd;                  /* listening socket */
   struct sockaddr_in serveraddr; /* server's addr */
-  int portno = atoi(argv[3]);
+  int portno = atoi(argv[2]);
   int connfd;
   int optval;
+  char *multi_hostname;
+  char *multi_portno;
   uint32_t *nodemask = malloc(sizeof(uint32_t));
   uint32_t *nodeflags =
       malloc(sizeof(uint32_t)); /* Global storing all node fds */
   int *node_fds = malloc(sizeof(int) * 32);
   struct NodeData *node_conn_info = malloc(sizeof(struct NodeData) * 32);
   bzero((char *)node_conn_info, sizeof(struct NodeData) * 32);
-  SSL *ssl_connection;
-  SSL_CTX *ssl_context = NULL;
-  BIO* ssl_client_b_io = NULL;
-  int ssl_error_code;
-  bool use_ssl;
-  if (strcmp(argv[1], "-ssl") == 0) {
-    use_ssl = true;
-  } else if (strcmp(argv[1], "-nossl") == 0) {
-    use_ssl = false;
-  } else {
-    fprintf(stderr, "usage: %s [-ssl | -nossl] <ip> <port> <node hostname> <node port>\n",
-            argv[0]);
-    exit(EXIT_FAILURE);
+  bool use_ssl = false;
+  bool use_multi = false;
+  for (int i = 0; i < argc; i++) {
+    if (strcmp(argv[i], "-ssl") == 0) {
+      use_ssl = true;
+    }
+    if (strcmp(argv[i], "-multi") == 0) {
+      if (i + 2 >= argc) {
+        fprintf(stderr,
+                "usage: %s <ip> <port> [-multi <node hostname> "
+                "<node port>] [-ssl]\n",
+                argv[0]);
+        exit(EXIT_FAILURE);
+      }
+      multi_hostname = argv[i + 1];
+      multi_portno = argv[i + 2];
+      use_multi = true;
+    }
   }
 
   if (use_ssl) {
@@ -873,19 +858,19 @@ int main(int argc, char **argv) {
   pthread_mutex_init(&lock, NULL);
   pthread_mutex_init(&fd_lock, NULL);
 
-  if (argc == 4) {
+  if (!use_multi) {
     *nodeflags = 1;
     node_fds[31] = listenfd;
     *nodemask = 1;
-    strcpy(node_conn_info[31].hostname, argv[2]);
+    strcpy(node_conn_info[31].hostname, argv[1]);
     node_conn_info[31].port = (unsigned short)portno;
   } else {
-    join_coop_cache(argv[2], portno, argv[4], argv[5], node_fds, listenfd,
-                    nodeflags, nodemask, node_conn_info, c);
+    join_coop_cache(argv[1], portno, multi_hostname, multi_portno, node_fds,
+                    listenfd, nodeflags, nodemask, node_conn_info, c);
   }
   while (1) {
     connfd = get_client_connfd(listenfd);
-    
+
     if (connfd < 0) {
       printf("error from get_client_connfd\n");
       // Error raised when trying to connect to client socket
@@ -910,7 +895,6 @@ int main(int argc, char **argv) {
   }
 }
 
-
 void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
   printf("ssl_handle_connect_req: begin\n");
   int client_r_fd, server_r_fd, client_w_fd, server_w_fd;
@@ -929,7 +913,7 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
 
   void **arr = split_request(req);
 
-  SSL* ssl_server_connection;
+  SSL *ssl_server_connection;
   SSL_CTX *ssl_server_context;
   BIO *ssl_server_b_io;
 
@@ -987,12 +971,10 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
     int a = ssl_check_cert(ssl_server_connection);
     printf("(%d) ssl_check_cert returned: %d\n", client_fd, a);
 
-
     // Connection succesfully established with server
     // Write HTTP 200 message to client
     printf("(%d) About to send HTTP 200 OK to client\n", client_fd);
-    n = write(client_fd, CONNECT_INIT_RESPONSE,
-              strlen(CONNECT_INIT_RESPONSE));
+    n = write(client_fd, CONNECT_INIT_RESPONSE, strlen(CONNECT_INIT_RESPONSE));
     if (n < 0) {
       close(server_fd);
       handle_error(client_fd, pthread_self());
@@ -1003,7 +985,8 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
   // SSL_accept() for SSL handshake with client
   int ssl_error_code;
   if ((ssl_error_code = SSL_accept(ssl)) <= 0) {
-    printf("(%d) ssl_proxy_fun: ERROR SSL_accept returned %d\n", client_fd, ssl_error_code);
+    printf("(%d) ssl_proxy_fun: ERROR SSL_accept returned %d\n", client_fd,
+           ssl_error_code);
     ssl_print_error(ssl, ssl_error_code);
   }
   printf("(%d) SSL handshake done with client\n", client_fd);
@@ -1012,9 +995,10 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
   timeout.tv_usec = 0;
 
   printf("(%d) About to SSL_read from client\n", client_fd);
-  bzero(buf, sizeof(buf)); 
+  bzero(buf, sizeof(buf));
   char *request = ssl_read_client_req(ssl, client_fd);
-  char *res = ssl_get_server_response(ssl, ssl_server_connection, client_fd, request);
+  char *res =
+      ssl_get_server_response(ssl, ssl_server_connection, client_fd, request);
   ssl_write_client_response(ssl, client_fd, res);
 
   while (1) {
@@ -1022,7 +1006,7 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
     FD_ZERO(&fdset);
     FD_SET(client_fd, &fdset);
     FD_SET(server_fd, &fdset);
-    n = select(max_fd + 1, &fdset, (fd_set *) 0, (fd_set *) 0, &timeout);
+    n = select(max_fd + 1, &fdset, (fd_set *)0, (fd_set *)0, &timeout);
     if (n <= 0) {
       continue;
     } else if (FD_ISSET(client_fd, &fdset)) {
@@ -1031,11 +1015,12 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
       if (n <= 0) {
         break;
       }
-      
+
       n = SSL_write(ssl_server_connection, buf, n);
 
       if (n < 0) {
-        printf("(%d) SSL CONNECT ERROR writing from client to server\n", client_fd);
+        printf("(%d) SSL CONNECT ERROR writing from client to server\n",
+               client_fd);
         close(server_fd);
         handle_error(client_fd, pthread_self());
         return;
@@ -1070,7 +1055,6 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
     }
   }
 
-  
   // only closing server fds because client_fd is closed after this function
   // is called in proxy_fun
 }
