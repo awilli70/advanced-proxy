@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <openssl/ssl.h>
 
 #define REQBUFSIZE 4096
 
@@ -103,6 +104,7 @@ char *read_client_req(int connfd) {
   bzero(buf, REQBUFSIZE);
   uint32_t i = 0;
   n = read(connfd, buf, 1024);
+  printf("(%d) read_client_req: read %d bytes\n", connfd, n);
   if (n < 0) {
     handle_error(connfd, pthread_self());
   }
@@ -120,12 +122,49 @@ char *read_client_req(int connfd) {
   return buf;
 }
 
+/* read: read input string from the client */
+char *ssl_read_client_req(SSL *ssl_connection, int connfd) {
+  char *buf = malloc(sizeof(char) * REQBUFSIZE); /* message buffer */
+  int n = 0;
+  assert(buf != NULL);
+  bzero(buf, REQBUFSIZE);
+  uint32_t i = 0;
+  printf("(%d) ssl_read_client_req: about to SSL_read\n", connfd);
+  n = SSL_read(ssl_connection, buf, 1024);
+  if (n <= 0) {
+    printf("(%d) ssl_read_client_req error from SSL_read\n", connfd);
+    ssl_print_error(ssl_connection, n);
+    handle_error(connfd, pthread_self());
+  }
+  printf("(%d) ssl_read_client_req:     just read %d bytes:\n%s\n", connfd, n, buf);
+  i += n;
+  while (memmem(buf, i, "\r\n\r\n", 4) == NULL) {
+    printf("(%d) ssl_read_client_req: about to SSL_read\n", connfd);
+    n = SSL_read(ssl_connection, buf + i, 1024);
+    if (n <= 0) {
+      printf("(%d) ssl_read_client_req error from SSL_read\n", connfd);
+      ssl_print_error(ssl_connection, n);
+      handle_error(connfd, pthread_self());
+    }
+
+    printf("(%d) ssl_read_client_req:     just read %d bytes:\n%s\n", connfd, n, buf + i);
+
+
+    i += n;
+  }
+  printf("*=======================================\n");
+  printf("(%d) ssl_read_client_req\nread %d bytes from client:\n%s\n", connfd, i, buf);
+  printf("=======================================*\n\n");
+  return buf;
+}
+
 void write_client_response(int connfd, char *buf) {
   uint32_t i = 0;
   int n = 0;
   uint32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
   printf("Header length: %d\n", header_length);
   i = parse_int_from_header(buf, "Content-Length: ");
+  printf("Content length: %d", i);
   if (i != (10 * REQBUFSIZE)) {
     n = write(connfd, buf, sizeof(char) * (i + header_length));
     // assert(n == sizeof(char) * (i + header_length));
@@ -137,6 +176,43 @@ void write_client_response(int connfd, char *buf) {
     handle_error(connfd, pthread_self());
     return;
   }
+
+  return;
+}
+
+void ssl_write_client_response(SSL *ssl_connection, int connfd, char *buf) 
+{
+  uint32_t i = 0;
+  int n = 0;
+  uint32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
+  printf("Header length: %d\n", header_length);
+  i = parse_int_from_header(buf, "Content-Length: ");
+  printf("oops\n");
+  if (i != (10 * REQBUFSIZE)) {
+    printf("yo\n");
+    n = SSL_write(ssl_connection, buf, sizeof(char) * (i + header_length));
+    printf("yoo\n");
+
+    // assert(n == sizeof(char) * (i + header_length));
+  } else {
+    printf("yooo\n");
+
+    n = SSL_write(ssl_connection, buf, sizeof(char) * i);
+    printf("yoooo\n");
+
+  }
+
+
+  if (n < 0) {
+    printf("error writing (n = %d)\n", n);
+    ssl_print_error(ssl_connection, n);
+    handle_error(connfd, pthread_self());
+    return;
+  }
+
+  printf("*=======================================\n");
+  printf("(%d) ssl_write_client_response\nwrote %d bytes to client:\n%s\n", connfd, n, buf);
+  printf("=======================================*\n\n");
 
   return;
 }
