@@ -28,6 +28,7 @@
 #define TIMEOUT 3
 #define BUFSIZE (10 * 1024 * 1024)
 #define CONNECT_INIT_RESPONSE "HTTP/1.1 200 OK\r\n\r\n"
+#define FORBIDDEN_RESPONSE "HTTP/1.1 403 Forbidden\r\n\r\n"
 
 struct __attribute__((__packed__)) NodeData {
   char hostname[15];
@@ -42,6 +43,7 @@ struct proxy_params {
   Cache_T c;
   pthread_t *t;
   struct NodeData *node_conn_info;
+  void **cf;
 };
 
 struct node_params {
@@ -516,6 +518,8 @@ void *proxy_fun(void *args) {
   int *nodeflags = ps->nodeflags;
   int *nodemask = ps->nodemask;
   struct NodeData *node_conn_info = ps->node_conn_info;
+  char **cf_arr = ps->cf[0];
+  int cf_size = * (int *) ps->cf[1];
   int dest_node = 1;
   int mask, shifts;
   struct sockaddr_in node;
@@ -524,9 +528,22 @@ void *proxy_fun(void *args) {
   pthread_t *currthread = ps->t;
   char *req, *res, *uri;
   char *req_type;
+
   printf("(%d) === Starting thread\n", connfd);
 
   req = read_client_req(connfd);
+  
+  if (cf_arr && (cf_size > 0)) {
+    void **arr = split_request(req);
+    char *host = arr[1];
+    for (int i = 0; i < cf_size; i++) {
+      if (strstr(host, cf_arr[i])) {
+        int n = write(connfd, FORBIDDEN_RESPONSE, strlen(FORBIDDEN_RESPONSE));
+        handle_error(connfd, pthread_self());
+      }
+    }
+  }
+
   req_type = get_req_type(req); // either "CONNECT" or "GET"
   if (strcmp(req_type, "GET") == 0) {
     handle_get_req(args, req);
@@ -548,7 +565,7 @@ void *proxy_fun(void *args) {
   free(req);
   free(ps);
   free(uri);
-  printf("Closing thread for %d\n", connfd);
+  printf("(%d) Closing thread for\n", connfd);
   close(connfd);
   pthread_exit(NULL);
 }
@@ -603,88 +620,6 @@ void *ssl_proxy_fun(void *args) {
     handle_error(connfd, pthread_self());
   }
   return;
-
-  // req = ssl_read_client_req(ssl_client_b_io, ssl_connection, connfd);
-  // req_type = get_req_type(req);
-  // printf("(%d) ssl_proxy_fun: req_type %s\n", connfd, req_type);
-
-  // if (strcmp(req_type, "GET") == 0) {
-  //   // Handle GET request
-  //   uri = make_uri(split_request(req));
-  //   mask = 1;
-  //   if (*nodeflags > 1) {
-  //     dest_node = hash(uri) % __builtin_popcount(*nodeflags);
-  //     dest_node = dest_node + 1;
-  //     int nodes_visited = 0;
-  //     shifts = 0;
-  //     while (nodes_visited < dest_node) {
-  //       if (mask & *nodeflags)
-  //         nodes_visited++;
-  //       if (nodes_visited != dest_node) {
-  //         mask = mask << 1;
-  //         shifts++;
-  //       }
-  //     }
-  //   }
-  //   if (*nodeflags > 1 && mask != *nodemask) {
-  //     printf("Sending GET request to node %d\n", node_fds[31 - shifts]);
-  //     write(node_fds[31 - shifts], req, (strstr(req, "\r\n\r\n") + 4) - req);
-  //     printf("Sent\n");
-  //     pthread_mutex_lock(&read_locks[31 - shifts]);
-  //     while (resbufs[31 - shifts] == NULL) {
-  //       pthread_cond_wait(&read_conds[31 - shifts], &read_locks[31 -
-  //       shifts]);
-  //     }
-  //     pthread_mutex_unlock(&read_locks[31 - shifts]);
-  //     ssl_write_client_response(ssl_connection, connfd, resbufs[31 -
-  //     shifts]); printf("GET response received and sent\n"); free(resbufs[31 -
-  //     shifts]); resbufs[31 - shifts] = NULL; close(connfd);
-  //   } else {
-  //     printf("GET request\n");
-  //     pthread_mutex_lock(&lock);
-  //     res = cache_get(c, uri);
-  //     pthread_mutex_unlock(&lock);
-  //     if (res == NULL) {
-  //       // response not found in cache --> request from server, cache,
-  //       printf("Response not found in cache\n");
-  //       res = get_server_response(ssl_connection, connfd, req);
-  //       if (check_header(res, "max-age=") != NULL) {
-  //         pthread_mutex_lock(&lock);
-  //         cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
-  //         pthread_mutex_unlock(&lock);
-  //       } else {
-  //         pthread_mutex_lock(&lock);
-  //         cache_put(c, uri, res, 3600);
-  //         pthread_mutex_unlock(&lock);
-  //       }
-  //       printf("Fetched %s from server\n", uri);
-  //       ssl_write_client_response(ssl_connection, connfd, res);
-
-  //     } else {
-  //       // response found in cache --> send back to client w/ new header
-  //       printf("Fetched %s from cache\n", uri);
-  //       res = add_header(res, cache_ttl(c, uri));
-  //       ssl_write_client_response(ssl_connection, connfd, res);
-  //       free(res);
-  //     }
-  //     printf("GET response sent for socket %d\n", connfd);
-  //   }
-  // } else if (strcmp(req_type, "JOIN") == 0) {
-  //   // Handle JOIN request for Coop cache
-  //   handle_node_join(connfd, node_fds, nodeflags, nodemask, node_conn_info,
-  //   req,
-  //                    c);
-  // } else {
-  //   // Not CONNECT or GET request --> error
-  //   handle_error(connfd, pthread_self());
-  // }
-  // free(req);
-  // free(ps);
-  // free(uri);
-  // printf("(%d) === Closing thread\n", connfd);
-  // ssl_close(connfd, ssl_connection, ssl_client_b_io);
-  // close(connfd);
-  // pthread_exit(NULL);
 }
 
 void handle_get_req(void *args, char *req) {
@@ -721,7 +656,6 @@ void handle_get_req(void *args, char *req) {
   if (*nodeflags > 1 && mask != *nodemask) {
     printf("Sending GET request to node %d\n", node_fds[31 - shifts]);
     write(node_fds[31 - shifts], req, (strstr(req, "\r\n\r\n") + 4) - req);
-    printf("Sent\n");
     pthread_mutex_lock(&read_locks[31 - shifts]);
     while (resbufs[31 - shifts] == NULL) {
       pthread_cond_wait(&read_conds[31 - shifts], &read_locks[31 - shifts]);
@@ -763,11 +697,59 @@ void handle_get_req(void *args, char *req) {
   }
 }
 
+void **get_cf_from_path(char *cf_path)
+{
+  FILE *cf_file = fopen(cf_path, "r");
+  char **cf_arr;
+  int arr_length = 0;
+  int longest_url_length = 0;
+  int temp_url_length = 0;
+
+  while(!feof(cf_file)) {
+    int c = fgetc(cf_file);
+    temp_url_length++;
+    if (c == '\n' || c == EOF) {
+      if (temp_url_length > longest_url_length) {
+        longest_url_length = temp_url_length;
+      }
+      arr_length++;
+      temp_url_length = 0;
+    }
+  }
+
+  rewind(cf_file);
+  cf_arr = malloc(sizeof(char *) * arr_length);
+
+  char *line = malloc(sizeof(char) * longest_url_length);
+  int read;
+  if (cf_file) {
+    int line_num = 0;
+    while ((read = getline(&line, &longest_url_length, cf_file)) != -1) {
+      for (int i = 0; i < strlen(line); i++) {
+        if (line[i] == '\n')
+          line[i] = '\0';
+      }
+      cf_arr[line_num] = line;
+      line = malloc(sizeof(char) * longest_url_length);
+      line_num++;
+    }
+    fclose(cf_file);
+  }
+  void **ret_vals = malloc(sizeof(void *) * 2);
+  int *len = malloc(sizeof(int));
+  *len = arr_length;
+  ret_vals[0] = (void *) cf_arr;
+  ret_vals[1] = (void *) len;
+
+
+  return ret_vals;
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) {
     fprintf(stderr,
             "usage: %s <ip> <port> [-multi <node hostname> "
-            "<node port>] [-ssl]\n",
+            "<node port>] [-ssl] [-cf <cf_path>]\n",
             argv[0]);
     exit(EXIT_FAILURE);
   }
@@ -779,6 +761,9 @@ int main(int argc, char **argv) {
   int optval;
   char *multi_hostname;
   char *multi_portno;
+  char *cf_path;
+  FILE *cf_file;
+  void **cf = NULL;
   uint32_t *nodemask = malloc(sizeof(uint32_t));
   uint32_t *nodeflags =
       malloc(sizeof(uint32_t)); /* Global storing all node fds */
@@ -795,13 +780,26 @@ int main(int argc, char **argv) {
       if (i + 2 >= argc) {
         fprintf(stderr,
                 "usage: %s <ip> <port> [-multi <node hostname> "
-                "<node port>] [-ssl]\n",
+                "<node port>] [-ssl] [-cf <cf_path>]\n",
                 argv[0]);
         exit(EXIT_FAILURE);
       }
       multi_hostname = argv[i + 1];
       multi_portno = argv[i + 2];
       use_multi = true;
+    }
+    if (strcmp(argv[i], "-cf") == 0) {
+      if (i + 1 >= argc) {
+        fprintf(stderr,
+                "usage: %s <ip> <port> [-multi <node hostname> "
+                "<node port>] [-ssl] [-cf <cf_path>]\n",
+                argv[0]);
+        exit(EXIT_FAILURE);
+      }
+      cf_path = argv[i+1];
+      cf = get_cf_from_path(cf_path);
+      printf("cf_path: %s\n", cf_path);
+      printf("cf_size: %d\n", * (int *) cf[1]);
     }
   }
 
@@ -887,6 +885,7 @@ int main(int argc, char **argv) {
     ps->nodeflags = nodeflags;
     ps->nodemask = nodemask;
     ps->node_conn_info = node_conn_info;
+    ps->cf = cf;
 
     if (use_ssl)
       pthread_create(p, NULL, ssl_proxy_fun, ps);
@@ -895,7 +894,8 @@ int main(int argc, char **argv) {
   }
 }
 
-void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
+void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) 
+{
   printf("ssl_handle_connect_req: begin\n");
   int client_r_fd, server_r_fd, client_w_fd, server_w_fd;
   struct timeval timeout;
