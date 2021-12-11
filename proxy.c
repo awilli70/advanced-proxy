@@ -532,19 +532,22 @@ void *proxy_fun(void *args) {
   printf("(%d) === Starting thread\n", connfd);
 
   req = read_client_req(connfd);
-  
-  if (cf_arr && (cf_size > 0)) {
-    void **arr = split_request(req);
-    char *host = arr[1];
-    for (int i = 0; i < cf_size; i++) {
-      if (strstr(host, cf_arr[i])) {
-        int n = write(connfd, FORBIDDEN_RESPONSE, strlen(FORBIDDEN_RESPONSE));
-        handle_error(connfd, pthread_self());
+
+  req_type = get_req_type(req); // either "CONNECT" or "GET"
+  if (strcmp(req_type, "GET") == 0 || strcmp(req_type, "CONNECT") == 0) {
+    if (cf_arr && (cf_size > 0)) {
+      void **arr = split_request(req);
+      char *host = arr[1];
+      for (int i = 0; i < cf_size; i++) {
+        if (strstr(host, cf_arr[i])) {
+          int n = write(connfd, FORBIDDEN_RESPONSE, strlen(FORBIDDEN_RESPONSE));
+          handle_error(connfd, pthread_self());
+        }
       }
     }
   }
 
-  req_type = get_req_type(req); // either "CONNECT" or "GET"
+
   if (strcmp(req_type, "GET") == 0) {
     handle_get_req(args, req);
   } else if (strcmp(req_type, "CONNECT") == 0) {
