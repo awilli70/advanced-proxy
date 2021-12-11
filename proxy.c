@@ -518,8 +518,13 @@ void *proxy_fun(void *args) {
   int *nodeflags = ps->nodeflags;
   int *nodemask = ps->nodemask;
   struct NodeData *node_conn_info = ps->node_conn_info;
-  char **cf_arr = ps->cf[0];
-  int cf_size = * (int *) ps->cf[1];
+  char **cf_arr = NULL;
+  int cf_size = 0;
+  if (ps->cf != NULL) {
+    printf("HERE!");
+    cf_arr = ps->cf[0];
+    cf_size = *(int *)ps->cf[1];
+  }
   int dest_node = 1;
   int mask, shifts;
   struct sockaddr_in node;
@@ -528,11 +533,9 @@ void *proxy_fun(void *args) {
   pthread_t *currthread = ps->t;
   char *req, *res, *uri;
   char *req_type;
-
   printf("(%d) === Starting thread\n", connfd);
 
   req = read_client_req(connfd);
-
   req_type = get_req_type(req); // either "CONNECT" or "GET"
   if (strcmp(req_type, "GET") == 0 || strcmp(req_type, "CONNECT") == 0) {
     if (cf_arr && (cf_size > 0)) {
@@ -541,14 +544,14 @@ void *proxy_fun(void *args) {
       for (int i = 0; i < cf_size; i++) {
         if (strstr(host, cf_arr[i])) {
           int n = write(connfd, FORBIDDEN_RESPONSE, strlen(FORBIDDEN_RESPONSE));
+          printf("In content filter, sending FORBIDDEN\n");
           handle_error(connfd, pthread_self());
         }
       }
     }
   }
-
-
   if (strcmp(req_type, "GET") == 0) {
+    // Handle GET request
     handle_get_req(args, req);
   } else if (strcmp(req_type, "CONNECT") == 0) {
     // Handle CONNECT request
@@ -700,15 +703,14 @@ void handle_get_req(void *args, char *req) {
   }
 }
 
-void **get_cf_from_path(char *cf_path)
-{
+void **get_cf_from_path(char *cf_path) {
   FILE *cf_file = fopen(cf_path, "r");
   char **cf_arr;
   int arr_length = 0;
   int longest_url_length = 0;
   int temp_url_length = 0;
 
-  while(!feof(cf_file)) {
+  while (!feof(cf_file)) {
     int c = fgetc(cf_file);
     temp_url_length++;
     if (c == '\n' || c == EOF) {
@@ -741,9 +743,8 @@ void **get_cf_from_path(char *cf_path)
   void **ret_vals = malloc(sizeof(void *) * 2);
   int *len = malloc(sizeof(int));
   *len = arr_length;
-  ret_vals[0] = (void *) cf_arr;
-  ret_vals[1] = (void *) len;
-
+  ret_vals[0] = (void *)cf_arr;
+  ret_vals[1] = (void *)len;
 
   return ret_vals;
 }
@@ -799,10 +800,10 @@ int main(int argc, char **argv) {
                 argv[0]);
         exit(EXIT_FAILURE);
       }
-      cf_path = argv[i+1];
+      cf_path = argv[i + 1];
       cf = get_cf_from_path(cf_path);
       printf("cf_path: %s\n", cf_path);
-      printf("cf_size: %d\n", * (int *) cf[1]);
+      printf("cf_size: %d\n", *(int *)cf[1]);
     }
   }
 
@@ -890,15 +891,16 @@ int main(int argc, char **argv) {
     ps->node_conn_info = node_conn_info;
     ps->cf = cf;
 
-    if (use_ssl)
+    if (use_ssl) {
       pthread_create(p, NULL, ssl_proxy_fun, ps);
-    else
+    } else {
+      printf("HERE\n");
       pthread_create(p, NULL, proxy_fun, ps);
+    }
   }
 }
 
-void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) 
-{
+void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
   printf("ssl_handle_connect_req: begin\n");
   int client_r_fd, server_r_fd, client_w_fd, server_w_fd;
   struct timeval timeout;
