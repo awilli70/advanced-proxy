@@ -261,6 +261,7 @@ void *node_fun(void *args) {
     bytes = 0;
     tot_bytes = 0;
     bytes = read(fd, buf, 1024);
+
     if (bytes <= 0) {
       int mask = 1 << (31 - idx);
       *node_flags = *node_flags ^ mask;
@@ -275,7 +276,7 @@ void *node_fun(void *args) {
         content_length = parse_int_from_header(buf, "Content-Length: ");
         content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
       }
-      bytes = read(fd, buf + bytes, 1024);
+      bytes = read(fd, buf + tot_bytes, 1024);
       if (bytes <= 0) {
         int mask = 1 << (31 - idx);
         *node_flags = *node_flags ^ mask;
@@ -367,7 +368,8 @@ void join_coop_cache(char *local_hostname, int local_port, char *node_hostname,
   if (write(sockfd, &join_msg, sizeof(struct Join)) < 0)
     error("ERROR writing JOIN message");
 
-  printf("(%03d)   Sent JOIN request to %s:%s\n", localfd, node_hostname, node_port);
+  printf("(%03d)   Sent JOIN request to %s:%s\n", localfd, node_hostname,
+         node_port);
 
   bytes = read(sockfd, &boot_msg, sizeof(struct Bootstrap));
   while (bytes > 0) {
@@ -422,12 +424,14 @@ void join_coop_cache(char *local_hostname, int local_port, char *node_hostname,
 
         if (connect(fd, (struct sockaddr *)&temp_sock, sizeof(temp_sock)) < 0) {
           *flags = *flags ^ loc;
-          printf("(%03d)   Failed connecting to node with flag %d\n", localfd, loc);
+          printf("(%03d)   Failed connecting to node with flag %d\n", localfd,
+                 loc);
         } else {
           if (write(fd, &join_msg, sizeof(struct Join)) < 0)
             error("ERROR writing JOIN message");
 
-          printf("(%03d)   Sent JOIN request to %s:%d\n", localfd, temp_host, temp_port);
+          printf("(%03d)   Sent JOIN request to %s:%d\n", localfd, temp_host,
+                 temp_port);
 
           bytes = read(fd, &temp_msg, sizeof(struct Bootstrap));
           while (bytes > 0) {
@@ -461,8 +465,7 @@ void join_coop_cache(char *local_hostname, int local_port, char *node_hostname,
 /* Handles addition of nodes to cooperative cache */
 void handle_node_join(int connfd, uint32_t *node_fds, uint32_t *nodeflags,
                       uint32_t *mask, struct NodeData *node_conn_info,
-                      char *req, Cache_T c) 
-{
+                      char *req, Cache_T c) {
   printf("(%03d)   Node connected\n", connfd);
   struct Bootstrap boot_msg;
   struct Join *join_msg = (void *)req;
@@ -541,7 +544,8 @@ void *proxy_fun(void *args) {
       for (int i = 0; i < cf_size; i++) {
         if (strstr(host, cf_arr[i])) {
           int n = write(connfd, FORBIDDEN_RESPONSE, strlen(FORBIDDEN_RESPONSE));
-          printf("(%03d)   Host %s forbidden. Sent HTTP 403 to client\n", connfd, host);
+          printf("(%03d)   Host %s forbidden. Sent HTTP 403 to client\n",
+                 connfd, host);
           handle_error(connfd, pthread_self());
         }
       }
@@ -606,7 +610,8 @@ void *ssl_proxy_fun(void *args) {
   req = read_client_req(connfd);
   req_type = get_req_type(req);
   char *host = split_request(req)[1];
-  printf("(%03d)   ssl_proxy_fun: init_req_type: %s %s\n", connfd, req_type, host);
+  printf("(%03d)   ssl_proxy_fun: init_req_type: %s %s\n", connfd, req_type,
+         host);
 
   if (strcmp(req_type, "CONNECT") == 0) {
     ssl_handle_connect_req(ssl_connection, connfd, req);
@@ -656,7 +661,8 @@ void handle_get_req(void *args, char *req) {
     }
   }
   if (*nodeflags > 1 && mask != *nodemask) {
-    printf("(%03d)   Sending GET request to node %d\n", connfd, node_fds[31 - shifts]);
+    printf("(%03d)   Sending GET request to node %d\n", connfd,
+           node_fds[31 - shifts]);
     write(node_fds[31 - shifts], req, (strstr(req, "\r\n\r\n") + 4) - req);
     pthread_mutex_lock(&read_locks[31 - shifts]);
     while (resbufs[31 - shifts] == NULL) {
@@ -664,7 +670,8 @@ void handle_get_req(void *args, char *req) {
     }
     pthread_mutex_unlock(&read_locks[31 - shifts]);
     write_client_response(connfd, resbufs[31 - shifts]);
-    printf("(%03d)   GET response received from node %d and sent to client\n", connfd, node_fds[31 - shifts]);
+    printf("(%03d)   GET response received from node %d and sent to client\n",
+           connfd, node_fds[31 - shifts]);
     free(resbufs[31 - shifts]);
     resbufs[31 - shifts] = NULL;
     close(connfd);
