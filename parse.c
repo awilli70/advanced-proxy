@@ -9,6 +9,7 @@
 
 #define GETREQ_SIZE 4096
 #define GETRES_SIZE (10 * 1024 * 1024)
+#define MAX_URI_LENGTH 2000
 
 /* get_req_type(char *req)
  *   args:
@@ -40,12 +41,10 @@ char *get_read_type(char *req) {
 
 /* returns arr with [path, host, port (if exists)] */
 void **split_request(char *req) {
-  // char *get_string = "GET ";
-  // ^ commented this out because seems like its never used
   char *host_string = "Host: ";
-  char *path = malloc(101 * sizeof(char));
+  char *path = malloc(MAX_URI_LENGTH * sizeof(char));
   assert(path != NULL);
-  char *host = malloc(101 * sizeof(char));
+  char *host = malloc(MAX_URI_LENGTH * sizeof(char));
   assert(host != NULL);
   int *port = malloc(sizeof(int));
   assert(port != NULL);
@@ -135,7 +134,7 @@ uint32_t parse_int_from_header(char *buf, char *delim) {
 }
 
 char *make_uri(void **req_arr) {
-  char *uri = malloc(200);
+  char *uri = malloc(sizeof(char) * 200);
   int *port = req_arr[2];
   char *host = req_arr[1];
   char *path = req_arr[0];
@@ -144,6 +143,7 @@ char *make_uri(void **req_arr) {
   assert(uri != NULL);
   sprintf(portstr, "%d", *port);
   assert(uri != NULL);
+
   uri = strcpy(uri, host);
   uri = strcat(uri, ":");
   uri = strcat(uri, portstr);

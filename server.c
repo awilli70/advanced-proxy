@@ -104,7 +104,6 @@ char *read_client_req(int connfd) {
   bzero(buf, REQBUFSIZE);
   uint32_t i = 0;
   n = read(connfd, buf, 1024);
-  printf("(%03d) read_client_req: read %d bytes\n", connfd, n);
   if (n < 0) {
     handle_error(connfd, pthread_self());
   }

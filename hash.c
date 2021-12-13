@@ -107,8 +107,8 @@ struct H *hash_insert(H h, char *key, N list_ptr) {
   } else {
     uint32_t idx = hash(key) % h->size;
     Queue_T q = h->arr[idx];
-    char *hash_key = malloc(sizeof(char) * 100);
-    hash_key = strncpy(hash_key, key, sizeof(char) * 100);
+    char *hash_key = malloc(sizeof(char) * 2000);
+    hash_key = strncpy(hash_key, key, sizeof(char) * 2000);
     char *data = malloc(sizeof(char) * 2);
     data = strncpy(data, "d", (sizeof(char) * 2));
     q = push(q, hash_key, data, 0, list_ptr);

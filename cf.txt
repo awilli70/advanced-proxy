@@ -1,5 +1,4 @@
-tufts.edu
 youtube.com
 facebook.com
-google.com
-cs.cmu.edu
+reddit.com
+tufts.edu
