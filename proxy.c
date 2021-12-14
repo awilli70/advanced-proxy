@@ -336,6 +336,7 @@ void join_coop_cache(char *local_hostname, int local_port, char *node_hostname,
   struct hostent *server;
   struct Bootstrap boot_msg;
   struct Bootstrap temp_msg;
+  int optval;
   int bytes = 0;
   struct Join join_msg;
   pthread_t *n;
@@ -349,6 +350,10 @@ void join_coop_cache(char *local_hostname, int local_port, char *node_hostname,
   if (sockfd < 0)
     error("ERROR opening socket");
 
+  optval = 1;
+  setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval,
+             sizeof(int));
+
   server = gethostbyname(node_hostname);
   if (server == NULL) {
     fprintf(stderr, "Invalid hostname for cooperative cache\n");
@@ -357,18 +362,21 @@ void join_coop_cache(char *local_hostname, int local_port, char *node_hostname,
 
   bzero((char *)&nodeaddr, sizeof(nodeaddr));
   nodeaddr.sin_family = AF_INET;
-  memcpy((char *)server->h_addr, (char *)&nodeaddr.sin_addr.s_addr,
-         server->h_length);
+  bcopy((char *)(server->h_addr), (char *)&nodeaddr.sin_addr.s_addr,
+        server->h_length);
   nodeaddr.sin_port = htons(atoi(node_port));
 
-  if (connect(sockfd, (struct sockaddr *)&nodeaddr, sizeof(nodeaddr)) < 0) {
+  int con_res = connect(sockfd, (struct sockaddr *)&nodeaddr, sizeof(nodeaddr));
+  printf("con_res: %d\n", con_res);
+
+  if (con_res < 0) {
     error("ERROR connecting");
   }
 
   if (write(sockfd, &join_msg, sizeof(struct Join)) < 0)
     error("ERROR writing JOIN message");
 
-  printf("(%03d)   Sent JOIN request to %s:%s\n", localfd, node_hostname,
+  printf("(%03d)   Sent JOIN request to %s:%s\n", sockfd, node_hostname,
          node_port);
 
   bytes = read(sockfd, &boot_msg, sizeof(struct Bootstrap));

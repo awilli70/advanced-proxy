@@ -1,3 +1,5 @@
 *.o
 mac
 a.out
+output.txt
+*.tar.gz
