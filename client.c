@@ -88,7 +88,7 @@ char *get_server_response(int client_fd, char *req) {
           if (i == content_length) {
             break;
           }
-        } else if (check_header(buf, "Transfer-Encoding: chunked") != NULL) {
+        } else if (check_header(buf, "Transfer-Encoding:") != NULL && check_header(buf, "chunked") != NULL) {
           is_chunked = true;
         }
       }
@@ -190,7 +190,7 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
         if (check_header(buf, "Content-Length: ") != NULL) {
           content_length = parse_int_from_header(buf, "Content-Length: ");
           content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
-        } else if (check_header(buf, "Transfer-Encoding: chunked") != NULL) {
+        } else if (check_header(buf, "Transfer-Encoding:") != NULL && check_header(buf, "chunked") != NULL) {
           is_chunked = true;
         }
       }

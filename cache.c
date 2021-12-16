@@ -83,7 +83,7 @@ void clear_stales(C c) {
   }
   for (i = 0; i < c->refs->size; i++) {
     if (stale_objs[i] != NULL) {
-      n = hash_search(c->refs, stale_objs[i]);
+      n = hash_search(c->refs, stale_objs[i])->list_ptr;
       hash_remove(c->refs, stale_objs[i]);
       delete_node(q, n);
     }

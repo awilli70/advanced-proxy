@@ -286,6 +286,9 @@ void *node_fun(void *args) {
       tot_bytes += bytes;
     }
     req_type = get_read_type(buf);
+    if (req_type == NULL) {
+      error("ERROR invalid request/response type in node_fun\n");
+    }
     if (strcmp(req_type, "GET") == 0) {
       uri = make_uri(split_request(buf, false));
       pthread_mutex_lock(&lock);
@@ -301,13 +304,12 @@ void *node_fun(void *args) {
 
         printf("(%03d) Fetched %s from server\n", fd, uri);
         write_client_response(fd, res);
-
       } else {
         // response found in cache 
         printf("(%03d) Fetched %s from cache\n", fd, uri);
         res = add_header(res, cache_ttl(c, uri));
         write_client_response(fd, res);
-        // free(res)
+        free(res);
       }
       printf("(%03d) GET response sent\n", fd);
       free(buf);
@@ -580,13 +582,9 @@ void handle_get_req(void *args, char *req) {
     } else {
       printf("(%03d)     Response found in cache\n", client_fd);
       // response found in cache --> send back to client w/ new header
-      printf("a\n");
       res = add_header(res, cache_ttl(c, uri));
-      printf("b\n");
-
       write_client_response(client_fd, res);
-      printf("c\n");
-
+      free(res);
       printf("(%03d)     Response sent from cache\n", client_fd);
     }
   }
@@ -668,6 +666,7 @@ void ssl_handle_get_req(SSL *ssl_client, SSL *ssl_server, void *args, char *req)
         handle_error(client_fd);
       }
       ssl_write_client_response(ssl_client, client_fd, res);
+      free(res);
       printf("(%03d)     Response sent from cache\n", client_fd);
     }
   }
@@ -890,7 +889,7 @@ void *proxy_fun(void *args) {
     handle_error(client_fd);
   }
   free(req);
-  free(args);
+  // free(args);
   printf("(%03d) CLOSING THREAD\n", client_fd);
   close(client_fd);
   pthread_exit(NULL);

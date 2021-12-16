@@ -33,10 +33,10 @@ char *get_req_type(char *req) {
 }
 
 char *get_read_type(char *req) {
-  if (strncmp(req, "HTTP", 4) == 0) {
-    return "RES";
-  } else {
+  if (get_req_type(req) != NULL) {
     return get_req_type(req);
+  } else if (strstr(req, "HTTP") != NULL) {
+    return "RES";
   }
 }
 
@@ -47,9 +47,9 @@ void **split_request(char *req, bool use_ssl) {
   assert(path != NULL);
   char *host = malloc(MAX_URI_LENGTH * sizeof(char));
   assert(host != NULL);
+
   int *port = malloc(sizeof(int));
   assert(port != NULL);
-
   *port = 0;
   uint32_t i = 0;
   void **arr = malloc(sizeof(void *) * 3);
@@ -72,6 +72,7 @@ void **split_request(char *req, bool use_ssl) {
   if (path_loc == NULL) {
     path_loc = strstr(req, "/");
   }
+
   while (*path_loc != ' ' && *path_loc != ':') {
     path[i] = *path_loc;
     i++;
@@ -214,4 +215,5 @@ char *add_header(char *buf, uint32_t ttl) {
     memcpy(res + strlen(res), buf + (header_end + 4 - buf),
            GETRES_SIZE - ((strstr(res, "\r\n\r\n") + 4) - res));
   }
+  return res;
 }
