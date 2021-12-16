@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define GETREQ_SIZE 4096
 #define GETRES_SIZE (10 * 1024 * 1024)
@@ -40,7 +41,7 @@ char *get_read_type(char *req) {
 }
 
 /* returns arr with [path, host, port (if exists)] */
-void **split_request(char *req) {
+void **split_request(char *req, bool use_ssl) {
   char *host_string = "Host: ";
   char *path = malloc(MAX_URI_LENGTH * sizeof(char));
   assert(path != NULL);
@@ -81,7 +82,7 @@ void **split_request(char *req) {
   // Get port number
   if (*host_loc == ' ' || *host_loc == '\r') {
     // No port is specified after host url
-    *port = 80;
+    *port = use_ssl ? 443 : 80;
     arr[0] = path;
     arr[1] = host;
     arr[2] = port;
@@ -123,7 +124,7 @@ uint32_t parse_int_from_header(char *buf, char *delim) {
   if ((it - strlen(delim)) == NULL)
     return GETRES_SIZE;
   assert((it - strlen(delim)) != NULL);
-  while (*it != ' ' && *it != '\r') {
+  while (*it != ' ' && *it != '\r' && *it != ',') {
     if (accum > 0) {
       accum *= 10;
     }
@@ -156,20 +157,27 @@ char *make_uri(void **req_arr) {
 }
 
 char *add_header(char *buf, uint32_t ttl) {
-  char *req = malloc((sizeof(char) * GETRES_SIZE));
+  char *res = malloc((sizeof(char) * GETRES_SIZE));
   char *header_end = strstr(buf, "\r\n\r\n");
   char *insert = "\r\nAge: ";
   char ttlstring[20];
   uint32_t bytes_remaining;
 
-  assert(req != NULL);
-  bzero(req, GETRES_SIZE);
-  strncpy(req, buf, (header_end - buf));
+  assert(res != NULL);
+  bzero(res, GETRES_SIZE);
+  strncpy(res, buf, (header_end - buf));
   sprintf(ttlstring, "%d", ttl);
-  (void)strncpy(req + strlen(req), insert, strlen(insert));
-  (void)strncpy(req + strlen(req), ttlstring, strlen(ttlstring));
-  (void)strncpy(req + strlen(req), "\r\n\r\n", strlen("\r\n\r\n"));
-  bytes_remaining = parse_int_from_header(req, "Content-Length: ");
-  memcpy(req + strlen(req), buf + (header_end + 4 - buf), bytes_remaining);
-  return req;
+  (void)strncpy(res + strlen(res), insert, strlen(insert));
+  (void)strncpy(res + strlen(res), ttlstring, strlen(ttlstring));
+  (void)strncpy(res + strlen(res), "\r\n\r\n", strlen("\r\n\r\n"));
+  if (strstr(res, "Content-Length: ") != NULL) {
+    bytes_remaining = parse_int_from_header(res, "Content-Length: ");
+  } else if (strstr(res, "Transfer-Encoding: chunked") != NULL) {
+    uint32_t header_length = (strstr(res, "\r\n\r\n") + 4) - res;
+    bytes_remaining = (strstr(res, "\r\n0\r\n\r\n") + 7) - res - header_length;
+  } else {
+    return NULL;
+  }
+  memcpy(res + strlen(res), buf + (header_end + 4 - buf), bytes_remaining);
+  return res;
 }

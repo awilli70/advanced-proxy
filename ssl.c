@@ -19,23 +19,12 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-// #define CERT_FILE "key_cert.pem"
-// #define KEY_FILE "key_cert.pem"
-
-// BIO *bio_err;
-// sslv23_client_method() for connecting to server
-
 int ssl_password_cb( char* buf, int num, int rwflag, void* userdata ) {
     return 0;
 }
 
-// int ssl_check_cert(SSL* ssl) {
-//     return (SSL_get_verify_result(ssl) == X509_V_OK);
-// }
-
 int ssl_check_cert(SSL* ssl) {
     if (!SSL_get_peer_certificate(ssl)) {
-        printf("ERROR getting server peer certificate\n");
         return 0;
     }
 
@@ -54,13 +43,6 @@ SSL_CTX *ssl_init_context(char *key_file, char *cert_file)
 
     SSL_CTX_set_verify(context, SSL_VERIFY_PEER, NULL);
     SSL_CTX_set_verify_depth(context, 4);
-
-    // puts(X509_get_default_cert_file());
-
-    // if (!bio_err) {
-    //     bio_err = BIO_new_fp(stderr, BIO_NOCLOSE);
-    // }
-
 
     signal(SIGPIPE, ssl_sigpipe_handle);
 
@@ -82,24 +64,14 @@ SSL_CTX *ssl_init_context(char *key_file, char *cert_file)
 
 void ssl_close(int socket, SSL *ssl, BIO* b_io)
 {
+    printf("(%03d) Closing SSL connection\n", socket);
     int error_code;
 
     error_code = SSL_shutdown(ssl);
 
     if (!error_code) {
-        printf("SSL forcing shutdown\n");
         shutdown(socket, 1);
         error_code = SSL_shutdown(ssl);
-    }
-
-    switch (error_code) {
-        case 1:
-            printf("SSL shutdown successful\n");
-            break;
-        case 0:
-        case -1:
-        default:
-            printf("Error shutting down SSL connections\n");
     }
 
     SSL_free(ssl);

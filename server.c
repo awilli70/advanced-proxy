@@ -98,22 +98,22 @@ int get_client_connfd(int listenfd) {
 }
 
 /* read: read input string from the client */
-char *read_client_req(int connfd) {
+char *read_client_req(int client_fd) {
   char *buf = malloc(sizeof(char) * REQBUFSIZE); /* message buffer */
   int n = 0;
   assert(buf != NULL);
   bzero(buf, REQBUFSIZE);
   uint32_t i = 0;
-  n = read(connfd, buf, 1024);
+  n = read(client_fd, buf, 1024);
   if (n < 0) {
-    handle_error(connfd, pthread_self());
+    handle_error(client_fd);
   }
   i += n;
   while (memmem(buf, i, "\r\n\r\n", 4) == NULL) {
-    n = read(connfd, buf + i, 1024);
+    n = read(client_fd, buf + i, 1024);
 
     if (n < 0) {
-      handle_error(connfd, pthread_self());
+      handle_error(client_fd);
       break;
     }
 
@@ -123,63 +123,57 @@ char *read_client_req(int connfd) {
 }
 
 /* read: read input string from the client */
-char *ssl_read_client_req(SSL *ssl_connection, int connfd) {
+char *ssl_read_client_req(SSL *ssl_client, int client_fd) {
   char *buf = malloc(sizeof(char) * REQBUFSIZE); /* message buffer */
   int n = 0;
   assert(buf != NULL);
   bzero(buf, REQBUFSIZE);
   uint32_t i = 0;
-  printf("(%03d) ssl_read_client_req: about to SSL_read\n", connfd);
-  n = SSL_read(ssl_connection, buf, 1024);
-  if (n <= 0) {
-    printf("(%03d) ssl_read_client_req error from SSL_read\n", connfd);
-    ssl_print_error(ssl_connection, n);
-    handle_error(connfd, pthread_self());
-  }
-  printf("(%03d) ssl_read_client_req:     just read %d bytes:\n%s\n", connfd, n,
-         buf);
-  i += n;
-  while (memmem(buf, i, "\r\n\r\n", 4) == NULL) {
-    printf("(%03d) ssl_read_client_req: about to SSL_read\n", connfd);
-    n = SSL_read(ssl_connection, buf + i, 1024);
-    if (n <= 0) {
-      printf("(%03d) ssl_read_client_req error from SSL_read\n", connfd);
-      ssl_print_error(ssl_connection, n);
-      handle_error(connfd, pthread_self());
-    }
 
-    printf("(%03d) ssl_read_client_req:     just read %d bytes:\n%s\n", connfd,
-           n, buf + i);
+  n = SSL_read(ssl_client, buf, 1024);
+  if (n <= 0) {
+    printf("(%03d) ssl_read_client_req error from SSL_read\n", client_fd);
+    ssl_print_error(ssl_client, n);
+    handle_error(client_fd);
+  }
+
+  i += n;
+
+  while (memmem(buf, i, "\r\n\r\n", 4) == NULL) {
+    n = SSL_read(ssl_client, buf + i, 1024);
+    if (n <= 0) {
+      printf("(%03d) ssl_read_client_req error from SSL_read\n", client_fd);
+      ssl_print_error(ssl_client, n);
+      handle_error(client_fd);
+    }
 
     i += n;
   }
 
-  printf("(%03d) read %d bytes from client\n", connfd, i);
-
   return buf;
 }
 
-void write_client_response(int connfd, char *buf) {
+void write_client_response(int client_fd, char *buf) {
   uint32_t i = 0;
   int n = 0;
   uint32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
   i = parse_int_from_header(buf, "Content-Length: ");
   if (i != (10 * REQBUFSIZE)) {
-    n = write(connfd, buf, sizeof(char) * (i + header_length));
+    n = write(client_fd, buf, sizeof(char) * (i + header_length));
     // assert(n == sizeof(char) * (i + header_length));
   } else {
-    n = write(connfd, buf, sizeof(char) * i);
+    n = write(client_fd, buf, sizeof(char) * i);
   }
 
   if (n < 0) {
-    handle_error(connfd, pthread_self());
+    handle_error(client_fd);
     return;
   }
 
   return;
 }
 
-void ssl_write_client_response(SSL *ssl_connection, int connfd, char *buf) {
+void ssl_write_client_response(SSL *ssl_client, int client_fd, char *buf) {
   uint32_t i = 0;
   int n = 0;
   uint32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
@@ -188,23 +182,20 @@ void ssl_write_client_response(SSL *ssl_connection, int connfd, char *buf) {
   } else if (strstr(buf, "Transfer-Encoding: chunked") != NULL) {
     i = (strstr(buf, "\r\n0\r\n\r\n") + 7) - buf - header_length;
   } else {
-    handle_error(connfd, pthread_self());
+    handle_error(client_fd);
   }
   
   if (i != (10 * REQBUFSIZE)) {
-    n = SSL_write(ssl_connection, buf, sizeof(char) * (i + header_length));
+    n = SSL_write(ssl_client, buf, sizeof(char) * (i + header_length));
   } else {
-    n = SSL_write(ssl_connection, buf, sizeof(char) * i);
+    n = SSL_write(ssl_client, buf, sizeof(char) * i);
   }
 
   if (n < 0) {
-    printf("error writing (n = %d)\n", n);
-    ssl_print_error(ssl_connection, n);
-    handle_error(connfd, pthread_self());
-    return;
+    printf("(%03d) ERROR SSL_write (n = %d)\n", n);
+    ssl_print_error(ssl_client, n);
+    handle_error(client_fd);
   }
-
-  printf("(%03d) wrote %d bytes to client\n", connfd, n);
 
   return;
 }

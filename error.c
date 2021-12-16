@@ -20,7 +20,7 @@ void error(char *msg) {
  * 
  * Gracefully close socket and thread, keep proxy running.
  */
-void handle_error(int socket, pthread_t thread)
+void handle_error(int socket)
 {
     printf("(%03d) HANDLING ERROR: closing socket and exiting thread\n", socket);
     close(socket);
