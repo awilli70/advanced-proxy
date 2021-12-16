@@ -542,8 +542,12 @@ void *proxy_fun(void *args) {
 
   req = read_client_req(connfd);
   req_type = get_req_type(req);
-  if (req_type)
-    printf("(%03d)   %s request received\n", connfd, req_type);
+  if (req_type == NULL) {
+    printf("(%03d) ERROR invalid request type (probably POST)\n");
+    handle_error(connfd, pthread_self());
+  }
+    
+  printf("(%03d) %s request received\n", connfd, req_type);
 
   if (strcmp(req_type, "GET") == 0 || strcmp(req_type, "CONNECT") == 0) {
     if ((cf_arr != NULL) && (cf_size > 0)) {
@@ -612,13 +616,15 @@ void *ssl_proxy_fun(void *args) {
   BIO *ssl_client_b_io = BIO_new_socket(connfd, BIO_NOCLOSE);
   SSL *ssl_connection = SSL_new(ssl_context);
   SSL_set_bio(ssl_connection, ssl_client_b_io, ssl_client_b_io);
-  // SSL_set_fd(ssl_connection, connfd);
-  printf("(%03d)   Buffered IO and SSL connection created\n", connfd);
 
   req = read_client_req(connfd);
   req_type = get_req_type(req);
+  if (req_type == NULL) {
+    printf("(%03d) ERROR invalid request type (probably POST)\n", connfd);
+  }
+
   char *host = split_request(req)[1];
-  printf("(%03d)   ssl_proxy_fun: init_req_type: %s %s\n", connfd, req_type,
+  printf("(%03d) %s %s\n", connfd, req_type,
          host);
 
   if (strcmp(req_type, "CONNECT") == 0) {
@@ -650,6 +656,8 @@ void handle_get_req(void *args, char *req) {
   Cache_T c = ps->c;
   pthread_t *currthread = ps->t;
   char *res, *uri;
+
+  printf("(%03d) Handling GET request\n", connfd);
 
   uri = make_uri(split_request(req));
 
@@ -684,12 +692,15 @@ void handle_get_req(void *args, char *req) {
     resbufs[31 - shifts] = NULL;
     close(connfd);
   } else {
+    printf("(%03d) Searching cache...\n", connfd);
     pthread_mutex_lock(&lock);
     res = cache_get(c, uri);
     pthread_mutex_unlock(&lock);
     if (res == NULL) {
+      printf("(%03d) Response not found in cache\n", connfd);
       // response not found in cache --> request from server, cache,
       res = get_server_response(connfd, req);
+      printf("(%03d) Response received from server\n", connfd);
 
       if (check_header(res, "max-age=") != NULL) {
         pthread_mutex_lock(&lock);
@@ -700,16 +711,16 @@ void handle_get_req(void *args, char *req) {
         cache_put(c, uri, res, 3600);
         pthread_mutex_unlock(&lock);
       }
-      printf("(%03d)   Fetched %s from server\n", connfd, uri);
-      write_client_response(connfd, res);
-    } else {
 
+      write_client_response(connfd, res);
+      printf("(%03d) GET response from server sent\n", connfd);
+    } else {
+      printf("(%03d) Response found in cache\n", connfd);
       // response found in cache --> send back to client w/ new header
-      printf("(%03d)   Fetched %s from cache\n", connfd, uri);
       res = add_header(res, cache_ttl(c, uri));
       write_client_response(connfd, res);
+      printf("(%03d) GET response from cache sent\n", connfd);
     }
-    printf("(%03d)   GET response sent\n", connfd);
   }
 }
 
@@ -902,7 +913,6 @@ int main(int argc, char **argv) {
 }
 
 void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
-  printf("ssl_handle_connect_req: begin\n");
   int client_r_fd, server_r_fd, client_w_fd, server_w_fd;
   struct timeval timeout;
   fd_set fdset;
@@ -923,7 +933,7 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
   SSL_CTX *ssl_server_context;
   BIO *ssl_server_b_io;
 
-  ssl_server_context = ssl_init_context(NULL, CERT_FILE);
+  ssl_server_context = ssl_init_context(NULL, TRUST_CERT_FILE);
 
   /* socket: create the socket */
   server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -971,15 +981,14 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
       handle_error(client_fd, pthread_self());
     }
 
-    printf("(%03d)   SSL handshake done with server\n", client_fd);
+    printf("(%03d) SSL handshake done with server\n", client_fd);
 
     // Check server certificate
     int a = ssl_check_cert(ssl_server_connection);
-    printf("(%03d)   ssl_check_cert returned: %d\n", client_fd, a);
+    printf("(%03d) ssl_check_cert returned: %d\n", client_fd, a);
 
     // Connection succesfully established with server
     // Write HTTP 200 message to client
-    printf("(%03d)   About to send HTTP 200 OK to client\n", client_fd);
     n = write(client_fd, CONNECT_INIT_RESPONSE, strlen(CONNECT_INIT_RESPONSE));
     if (n < 0) {
       close(server_fd);
@@ -994,73 +1003,76 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req) {
     printf("(%03d)   ssl_proxy_fun: ERROR SSL_accept returned %d\n", client_fd,
            ssl_error_code);
     ssl_print_error(ssl, ssl_error_code);
+    ssl_close(server_fd, ssl_server_connection, ssl_server_b_io);
+    close(server_fd);
+    handle_error(client_fd, pthread_self());
   }
   printf("(%03d)   SSL handshake done with client\n", client_fd);
 
   timeout.tv_sec = TIMEOUT;
   timeout.tv_usec = 0;
 
-  printf("(%03d)   About to SSL_read from client\n", client_fd);
   bzero(buf, sizeof(buf));
   char *request = ssl_read_client_req(ssl, client_fd);
   char *res =
       ssl_get_server_response(ssl, ssl_server_connection, client_fd, request);
   ssl_write_client_response(ssl, client_fd, res);
 
-  while (1) {
-    max_fd = client_fd >= server_fd ? client_fd : server_fd;
-    FD_ZERO(&fdset);
-    FD_SET(client_fd, &fdset);
-    FD_SET(server_fd, &fdset);
-    n = select(max_fd + 1, &fdset, (fd_set *)0, (fd_set *)0, &timeout);
-    if (n <= 0) {
-      continue;
-    } else if (FD_ISSET(client_fd, &fdset)) {
-      // Client has something to say
-      n = SSL_read(ssl, buf, sizeof(buf));
-      if (n <= 0) {
-        break;
-      }
+  // while (1) {
+  //   max_fd = client_fd >= server_fd ? client_fd : server_fd;
+  //   FD_ZERO(&fdset);
+  //   FD_SET(client_fd, &fdset);
+  //   FD_SET(server_fd, &fdset);
+  //   n = select(max_fd + 1, &fdset, (fd_set *)0, (fd_set *)0, &timeout);
+  //   if (n <= 0) {
+  //     continue;
+  //   } else if (FD_ISSET(client_fd, &fdset)) {
+  //     // Client has something to say
+  //     n = SSL_read(ssl, buf, sizeof(buf));
+  //     if (n <= 0) {
+  //       break;
+  //     }
 
-      n = SSL_write(ssl_server_connection, buf, n);
+  //     n = SSL_write(ssl_server_connection, buf, n);
 
-      if (n < 0) {
-        printf("(%03d)   SSL CONNECT ERROR writing from client to server\n",
-               client_fd);
-        close(server_fd);
-        handle_error(client_fd, pthread_self());
-        return;
-      }
+  //     if (n < 0) {
+  //       printf("(%03d)   SSL CONNECT ERROR writing from client to server\n",
+  //              client_fd);
+  //       close(server_fd);
+  //       handle_error(client_fd, pthread_self());
+  //       return;
+  //     }
 
-      continue;
-    } else if (FD_ISSET(server_fd, &fdset)) {
-      // Server has something to say
-      n = SSL_read(ssl_server_connection, buf, sizeof(buf));
+  //     continue;
+  //   } else if (FD_ISSET(server_fd, &fdset)) {
+  //     // Server has something to say
+  //     n = SSL_read(ssl_server_connection, buf, sizeof(buf));
 
-      if (n < 0) {
-        printf("(%03d)   SSL CONNECT ERROR reading from server\n", client_fd);
-        close(server_fd);
-        handle_error(client_fd, pthread_self());
-        return;
-      }
+  //     if (n < 0) {
+  //       printf("(%03d)   SSL CONNECT ERROR reading from server\n", client_fd);
+  //       close(server_fd);
+  //       handle_error(client_fd, pthread_self());
+  //       return;
+  //     }
 
-      if (n == 0) {
-        break;
-      }
+  //     if (n == 0) {
+  //       break;
+  //     }
 
-      n = SSL_write(ssl, buf, n);
+  //     n = SSL_write(ssl, buf, n);
 
-      if (n < 0) {
-        printf("  SSL CONNECT ERROR write from server to client\n");
-        close(server_fd);
-        handle_error(client_fd, pthread_self());
-        return;
-      }
+  //     if (n < 0) {
+  //       printf("  SSL CONNECT ERROR write from server to client\n");
+  //       close(server_fd);
+  //       handle_error(client_fd, pthread_self());
+  //       return;
+  //     }
 
-      continue;
-    }
-  }
+  //     continue;
+  //   }
+  // }
 
   // only closing server fds because client_fd is closed after this function
   // is called in proxy_fun
+  close(server_fd);
 }

@@ -77,8 +77,6 @@ SSL_CTX *ssl_init_context(char *key_file, char *cert_file)
     if (!(SSL_CTX_load_verify_locations(context, cert_file, 0)))
         error("ERROR reading certificate authority list");
 
-
-
     return context;
 }
 

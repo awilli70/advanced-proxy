@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #define BUFSIZE (10 * 1024 * 1024)
 
@@ -72,19 +73,32 @@ char *get_server_response(int client_fd, char *req) {
   bzero(buf, BUFSIZE);
   i = 0;
 
-  n = read(sockfd, buf, 1024);
+  // n = read(sockfd, buf, 1024);
 
-  if (n < 0) {
-    close(sockfd);
-    // handle_error(client_fd, pthread_self());
-  }
+  // if (n < 0) {
+  //   close(sockfd);
+  //   // handle_error(client_fd, pthread_self());
+  // }
 
-  i += n;
-  while (n > 0 && i < content_length) {
-    if (content_length > BUFSIZE &&
-        check_header(buf, "Content-Length: ") != NULL) {
-      content_length = parse_int_from_header(buf, "Content-Length: ");
-      content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
+  // i += n;
+  bool is_chunked = false;
+  bool has_content_length = false;
+  do {
+    if (!is_chunked && !has_content_length) {
+      if (content_length > BUFSIZE) {
+        if (check_header(buf, "Content-Length: ") != NULL) {
+          printf("(%03d) \"Content-Length\" found in header\n", client_fd);
+          content_length = parse_int_from_header(buf, "Content-Length: ");
+          content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
+          has_content_length = true;
+          if (i == content_length) {
+            break;
+          }
+        } else if (check_header(buf, "Transfer-Encoding: chunked") != NULL) {
+          printf("(%03d) Response is chunked\n");
+          is_chunked = true;
+        }
+      }
     }
 
     n = read(sockfd, buf + i, 1024);
@@ -95,7 +109,43 @@ char *get_server_response(int client_fd, char *req) {
     }
 
     i += n;
-  }
+    
+    // If response is chunk encoded, return once we see the final chunk
+    if (is_chunked && strstr(buf, "\r\n0\r\n\r\n") != NULL) {
+      break;
+    }
+  } while (n > 0 && i < content_length);
+
+  // while (n > 0 && i < content_length) {
+  //   if (!is_chunked) {
+  //     if (content_length > BUFSIZE) {
+  //       if (check_header(buf, "Content-Length: ") != NULL) {
+  //         content_length = parse_int_from_header(buf, "Content-Length: ");
+  //         content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
+  //         if (i == content_length) {
+  //           break;
+  //         }
+  //       } else if (check_header(buf, "Transfer-Encoding: chunked") != NULL) {
+  //         printf("(%03d) Response is chunked\n");
+  //         is_chunked = true;
+  //       }
+  //     }
+  //   }
+
+  //   n = read(sockfd, buf + i, 1024);
+
+  //   if (n < 0) {
+  //     close(sockfd);
+  //     // handle_error(client_fd, pthread_self());
+  //   }
+
+  //   i += n;
+    
+  //   // If response is chunk encoded, return once we see the final chunk
+  //   if (is_chunked && strstr(buf, "\r\n0\r\n\r\n") != NULL) {
+  //     break;
+  //   }
+  // }
   close(sockfd);
   free(arr[0]);
   free(arr[1]);
@@ -141,7 +191,7 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
     // TODO: move to parse.c
     *portno = 443;
   }
-  printf("(%d) ssl_get_server_response: portno %d\n", client_fd, *portno);
+  printf("(%03d) ssl_get_server_response: portno %d\n", client_fd, *portno);
   /* build the server's Internet address */
   bzero((char *)&serveraddr, sizeof(serveraddr));
   serveraddr.sin_family = AF_INET;
@@ -159,18 +209,15 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
     close(sockfd);
     handle_error(client_fd, pthread_self());
   }
-  printf("*=======================================\n");
-  printf("ssl_get_server_response\nwrote %d bytes to server:\n%s\n", n, req);
-  printf("=======================================*\n\n");
 
-  u_int32_t content_length = BUFSIZE - 1;
+  printf("(%03d) wrote %d bytes to server\n", client_fd, n);
+
+  u_int32_t content_length = BUFSIZE + 1;
 
   bzero(buf, BUFSIZE);
   i = 0;
-  printf("(%d) ssl_get_server_response: About to SSL_read from server\n",
-         client_fd);
+
   n = SSL_read(ssl_server, buf, 1024);
-  printf("(%d) ssl_get_server_response: read %d bytes\n", client_fd, n);
 
   if (n <= 0) {
     close(sockfd);
@@ -178,16 +225,21 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
   }
 
   i += n;
-  while (SSL_pending(ssl_server) > 0 && i < content_length) {
-    if (content_length > BUFSIZE &&
-        check_header(buf, "Content-Length: ") != NULL) {
-      content_length = parse_int_from_header(buf, "Content-Length: ");
-      content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
+  bool is_chunked = false;
+  while (n > 0 && i < content_length) {
+    if (!is_chunked) {
+      if (content_length > BUFSIZE) {
+        if (check_header(buf, "Content-Length: ") != NULL) {
+          content_length = parse_int_from_header(buf, "Content-Length: ");
+          content_length = content_length + (strstr(buf, "\r\n\r\n") + 4 - buf);
+        } else if (check_header(buf, "Transfer-Encoding: chunked") != NULL) {
+          printf("(%03d) Response is chunked\n", client_fd);
+          is_chunked = true;
+        }
+      }
     }
-    printf("(%d) ssl_get_server_response: About to SSL_read from server\n",
-           client_fd);
+
     n = SSL_read(ssl_server, buf + i, 1024);
-    printf("(%d) ssl_get_server_response: read %d bytes\n", client_fd, n);
 
     if (n < 0) {
       close(sockfd);
@@ -195,13 +247,15 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
     }
 
     i += n;
-    if (n == 0)
+    
+    // If response is chunk encoded, return once we see the final chunk
+    if (is_chunked && (strstr(buf, "\r\n0\r\n\r\n") != NULL)) {
+      printf("(%03d) Final chunk detected, done reading\n", client_fd);
       break;
+    }
   }
 
-  printf("*=======================================\n");
-  printf("ssl_get_server_response\nread %d bytes from server:\n%s\n", i, buf);
-  printf("=======================================*\n\n");
+  printf("(%03d) read %d bytes from server", client_fd, i);
 
   ssl_close(sockfd, ssl_server, NULL);
   close(sockfd);

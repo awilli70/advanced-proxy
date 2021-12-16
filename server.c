@@ -153,10 +153,9 @@ char *ssl_read_client_req(SSL *ssl_connection, int connfd) {
 
     i += n;
   }
-  printf("*=======================================\n");
-  printf("(%03d) ssl_read_client_req\nread %d bytes from client:\n%s\n", connfd,
-         i, buf);
-  printf("=======================================*\n\n");
+
+  printf("(%03d) read %d bytes from client\n", connfd, i);
+
   return buf;
 }
 
@@ -184,20 +183,18 @@ void ssl_write_client_response(SSL *ssl_connection, int connfd, char *buf) {
   uint32_t i = 0;
   int n = 0;
   uint32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
-  printf("Header length: %d\n", header_length);
-  i = parse_int_from_header(buf, "Content-Length: ");
-  printf("oops\n");
-  if (i != (10 * REQBUFSIZE)) {
-    printf("yo\n");
-    n = SSL_write(ssl_connection, buf, sizeof(char) * (i + header_length));
-    printf("yoo\n");
-
-    // assert(n == sizeof(char) * (i + header_length));
+  if (strstr(buf, "Content-Length: ") != NULL) {
+    i = parse_int_from_header(buf, "Content-Length: ");
+  } else if (strstr(buf, "Transfer-Encoding: chunked") != NULL) {
+    i = (strstr(buf, "\r\n0\r\n\r\n") + 7) - buf - header_length;
   } else {
-    printf("yooo\n");
-
+    handle_error(connfd, pthread_self());
+  }
+  
+  if (i != (10 * REQBUFSIZE)) {
+    n = SSL_write(ssl_connection, buf, sizeof(char) * (i + header_length));
+  } else {
     n = SSL_write(ssl_connection, buf, sizeof(char) * i);
-    printf("yoooo\n");
   }
 
   if (n < 0) {
@@ -207,10 +204,7 @@ void ssl_write_client_response(SSL *ssl_connection, int connfd, char *buf) {
     return;
   }
 
-  printf("*=======================================\n");
-  printf("(%03d) ssl_write_client_response\nwrote %d bytes to client:\n%s\n",
-         connfd, n, buf);
-  printf("=======================================*\n\n");
+  printf("(%03d) wrote %d bytes to client\n", connfd, n);
 
   return;
 }
