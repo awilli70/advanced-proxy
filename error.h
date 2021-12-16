@@ -18,7 +18,7 @@
 #include <openssl/ssl.h>
 
 void error(char *msg);
-void handle_error(int socket, pthread_t thread);
+void handle_error(int socket);
 void invalid_hostname(char *hostname);
 
 #endif

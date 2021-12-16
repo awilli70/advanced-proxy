@@ -292,27 +292,22 @@ void *node_fun(void *args) {
       res = cache_get(c, uri);
       pthread_mutex_unlock(&lock);
       if (res == NULL) {
-        // response not found in cache --> request from server, cache,
-        // send
+        // response not found in cache 
         res = get_server_response(fd, buf);
-        if (check_header(res, "max-age=") != NULL) {
-          pthread_mutex_lock(&lock);
-          cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
-          pthread_mutex_unlock(&lock);
-        } else {
-          pthread_mutex_lock(&lock);
-          cache_put(c, uri, res, 3600);
-          pthread_mutex_unlock(&lock);
-        }
+
+        pthread_mutex_lock(&lock);
+        cache_put(c, uri, res, get_max_age_from_response(res));
+        pthread_mutex_unlock(&lock);
+
         printf("(%03d) Fetched %s from server\n", fd, uri);
         write_client_response(fd, res);
 
       } else {
-        // response found in cache --> send back to client w/ new header
+        // response found in cache 
         printf("(%03d) Fetched %s from cache\n", fd, uri);
         res = add_header(res, cache_ttl(c, uri));
         write_client_response(fd, res);
-        free(res);
+        // free(res)
       }
       printf("(%03d) GET response sent\n", fd);
       free(buf);
@@ -572,14 +567,12 @@ void handle_get_req(void *args, char *req) {
       res = get_server_response(client_fd, req);
       printf("(%03d)     Response received from server\n", client_fd);
 
-      if (check_header(res, "max-age=") != NULL) {
+      if (check_header(res, "no-store") == NULL) {
         pthread_mutex_lock(&lock);
-        cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
+        cache_put(c, uri, res, get_max_age_from_response(res));
         pthread_mutex_unlock(&lock);
       } else {
-        pthread_mutex_lock(&lock);
-        cache_put(c, uri, res, 3600);
-        pthread_mutex_unlock(&lock);
+        printf("(%03d)     \"no-store\" found in header, skipping cache insert\n", client_fd);
       }
 
       write_client_response(client_fd, res);
@@ -587,8 +580,13 @@ void handle_get_req(void *args, char *req) {
     } else {
       printf("(%03d)     Response found in cache\n", client_fd);
       // response found in cache --> send back to client w/ new header
+      printf("a\n");
       res = add_header(res, cache_ttl(c, uri));
+      printf("b\n");
+
       write_client_response(client_fd, res);
+      printf("c\n");
+
       printf("(%03d)     Response sent from cache\n", client_fd);
     }
   }
@@ -654,15 +652,9 @@ void ssl_handle_get_req(SSL *ssl_client, SSL *ssl_server, void *args, char *req)
       printf("(%03d)     Response received from server\n", client_fd);
       if (check_header(res, "no-store") == NULL) {
         // Only cache is "no-store" is not present in header
-        if (check_header(res, "max-age=") != NULL) {
-          pthread_mutex_lock(&lock);
-          cache_put(c, uri, res, parse_int_from_header(res, "max-age="));
-          pthread_mutex_unlock(&lock);
-        } else {
-          pthread_mutex_lock(&lock);
-          cache_put(c, uri, res, 3600);
-          pthread_mutex_unlock(&lock);
-        }
+        pthread_mutex_lock(&lock);
+        cache_put(c, uri, res, get_max_age_from_response(res));
+        pthread_mutex_unlock(&lock);
       } else {
         printf("(%03d)     \"no-store\" found in header, skipping cache insert\n", client_fd);
       }

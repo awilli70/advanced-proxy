@@ -125,12 +125,39 @@ uint32_t parse_int_from_header(char *buf, char *delim) {
     return GETRES_SIZE;
   assert((it - strlen(delim)) != NULL);
   while (*it != ' ' && *it != '\r' && *it != ',') {
-    if (accum > 0) {
-      accum *= 10;
-    }
+    accum *= 10;
     accum = accum + (*it - '0');
     it = it + 1;
   }
+  return accum;
+}
+
+uint32_t get_max_age_from_response(char *res) {
+  uint32_t accum = 0;
+  char *cache_control_delim = "Cache-Control: ";
+  char *max_age_delim = "max-age=";
+  char *cache_control_line = check_header(res, cache_control_delim);
+  // No Cache-Control line in header
+  if (cache_control_line == NULL)
+    return 3600;
+
+  char *cache_control_end = strstr(cache_control_line, "\r\n");
+  *cache_control_end = '\0';
+
+  // No max-age in Cache-Control line
+  if (strstr(cache_control_line, max_age_delim) == NULL)
+    return 3600;
+
+  *cache_control_end = '\r';
+
+  // Get max_age (accum) starting from substring "max-age="
+  char *max_age_s = strstr(cache_control_line, max_age_delim) + strlen(max_age_delim);
+  while (*max_age_s != ' ' && *max_age_s != '\r' && *max_age_s != ',') {
+    accum *= 10;
+    accum = accum + (*max_age_s - '0');
+    max_age_s = max_age_s + 1;
+  }
+
   return accum;
 }
 
@@ -161,7 +188,7 @@ char *add_header(char *buf, uint32_t ttl) {
   char *header_end = strstr(buf, "\r\n\r\n");
   char *insert = "\r\nAge: ";
   char ttlstring[20];
-  uint32_t bytes_remaining;
+  int32_t bytes_remaining;
 
   assert(res != NULL);
   bzero(res, GETRES_SIZE);
@@ -172,12 +199,19 @@ char *add_header(char *buf, uint32_t ttl) {
   (void)strncpy(res + strlen(res), "\r\n\r\n", strlen("\r\n\r\n"));
   if (strstr(res, "Content-Length: ") != NULL) {
     bytes_remaining = parse_int_from_header(res, "Content-Length: ");
-  } else if (strstr(res, "Transfer-Encoding: chunked") != NULL) {
+  } else if (strstr(res, "Transfer-Encoding:") != NULL &&
+             strstr(res, "chunked") != NULL) {
     uint32_t header_length = (strstr(res, "\r\n\r\n") + 4) - res;
-    bytes_remaining = (strstr(res, "\r\n0\r\n\r\n") + 7) - res - header_length;
+    bytes_remaining = strstr(res, "\r\n0\r\n\r\n") + 7 - header_length - res;
+    if (bytes_remaining - 7 + header_length + res == NULL)
+      bytes_remaining = -1;
   } else {
     return NULL;
   }
-  memcpy(res + strlen(res), buf + (header_end + 4 - buf), bytes_remaining);
-  return res;
+  if (bytes_remaining >= 0) {
+    memcpy(res + strlen(res), buf + (header_end + 4 - buf), bytes_remaining);
+  } else {
+    memcpy(res + strlen(res), buf + (header_end + 4 - buf),
+           GETRES_SIZE - ((strstr(res, "\r\n\r\n") + 4) - res));
+  }
 }
