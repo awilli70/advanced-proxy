@@ -178,7 +178,7 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
 
   /* gethostbyname: get the server's DNS entry */
   hostname = arr[1];
-  printf("(%d) ssl_get_server_response: hostname %s\n", client_fd, hostname);
+  printf("(%03d) ssl_get_server_response: hostname %s\n", client_fd, hostname);
 
   server = gethostbyname(hostname);
   if (server == NULL) {
@@ -255,7 +255,7 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
     }
   }
 
-  printf("(%03d) read %d bytes from server", client_fd, i);
+  printf("(%03d) read %d bytes from server\n", client_fd, i);
 
   ssl_close(sockfd, ssl_server, NULL);
   close(sockfd);
