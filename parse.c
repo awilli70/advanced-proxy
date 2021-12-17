@@ -163,11 +163,13 @@ uint32_t get_max_age_from_response(char *res) {
 }
 
 char *make_uri(void **req_arr) {
-  char *uri = malloc(sizeof(char) * 200);
+  
   int *port = req_arr[2];
   char *host = req_arr[1];
   char *path = req_arr[0];
   char portstr[10];
+
+  char *uri = malloc((sizeof(char) * strlen(host)) + (sizeof(char) * strlen(path)) + 100);
 
   assert(uri != NULL);
   sprintf(portstr, "%d", *port);

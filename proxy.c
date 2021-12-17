@@ -229,7 +229,7 @@ void handle_connect_req(int client_fd, char *req) {
       continue;
     }
   }
-  printf("(%03d) CONNECT tunnel finished\n");
+  printf("(%03d) CONNECT tunnel finished\n", client_fd);
   free(buf);
   free(arr);
   close(server_r_fd);
