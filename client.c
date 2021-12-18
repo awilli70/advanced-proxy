@@ -163,6 +163,7 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
   /* send the message line to the server */
   u_int32_t i = (strstr(req, "\r\n\r\n") + 4) - req;
   n = SSL_write(ssl_server, req, i);
+  printf("(%03d)       Request sent to server\n", client_fd);
   if (n < 0) {
     printf("(%03d) ssl_get_server_response: ERROR SSL_write returned %d\n", client_fd, n);
     ssl_print_error(ssl_server, n);
@@ -175,16 +176,8 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
   bzero(buf, BUFSIZE);
   i = 0;
 
-  n = SSL_read(ssl_server, buf, 1024);
-
-  if (n <= 0) {
-    close(server_fd);
-    handle_error(client_fd);
-  }
-
-  i += n;
   bool is_chunked = false;
-  while (n > 0 && i < content_length) {
+  do {
     if (!is_chunked) {
       if (content_length > BUFSIZE) {
         if (check_header(buf, "Content-Length: ") != NULL) {
@@ -196,7 +189,12 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
       }
     }
 
+    if (i == content_length) 
+        break;
+
+
     n = SSL_read(ssl_server, buf + i, 1024);
+    // printf("read %d bytes\n", n);
 
     if (n < 0) {
       close(server_fd);
@@ -209,9 +207,8 @@ char *ssl_get_server_response(SSL *ssl_client, SSL *ssl_server, int client_fd,
     if (is_chunked && (strstr(buf, "\r\n0\r\n\r\n") != NULL)) {
       break;
     }
-  }
+  } while (n > 0 && i < content_length);
 
-  ssl_close(server_fd, ssl_server, NULL);
   close(server_fd);
   free(arr[0]);
   free(arr[1]);

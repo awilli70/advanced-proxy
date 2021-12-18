@@ -777,7 +777,9 @@ void ssl_handle_connect_req(SSL *ssl, int client_fd, char *req, void *args) {
     handle_error(client_fd);
   }
   ssl_handle_get_req(ssl, ssl_server, args, get_req);
+  ssl_close(server_fd, ssl_server, NULL);
   close(server_fd);
+  close(client_fd);
   free(buf);
 }
 

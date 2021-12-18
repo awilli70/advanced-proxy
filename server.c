@@ -179,9 +179,10 @@ void ssl_write_client_response(SSL *ssl_client, int client_fd, char *buf) {
   uint32_t header_length = (strstr(buf, "\r\n\r\n") + 4) - buf;
   if (strstr(buf, "Content-Length: ") != NULL) {
     i = parse_int_from_header(buf, "Content-Length: ");
-  } else if (strstr(buf, "Transfer-Encoding") != NULL && strstr(buf, "chunked" != NULL)) {
+  } else if (strstr(buf, "Transfer-Encoding") != NULL && strstr(buf, "chunked") != NULL) {
     i = (strstr(buf, "\r\n0\r\n\r\n") + 7) - buf - header_length;
   } else {
+    ssl_close(client_fd, ssl_client, NULL);
     handle_error(client_fd);
   }
   
